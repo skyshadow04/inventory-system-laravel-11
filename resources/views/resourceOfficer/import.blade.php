@@ -3,12 +3,22 @@
         <div class="max-w-3xl mx-auto">
             <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Import Inventory from Excel</h1>
+                    <h1 class="text-2xl font-bold text-slate-800">{{ $importTitle ?? 'Import Inventory from Excel' }}</h1>
                     <p class="mt-1 text-sm text-slate-600">Upload a file containing the item list and add all rows to the inventory.</p>
                 </div>
                 <a href="{{ route('resource-officer') }}" class="inline-flex items-center px-4 py-2 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200">Back to Inventory</a>
             </div>
 
+            @if (session('success'))
+                <div class="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+                    {{ session('success') }}
+                </div>
+            @endif
+            @if (session('info'))
+                <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    {{ session('info') }}
+                </div>
+            @endif
             @if ($errors->any())
                 <div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                     <p class="font-semibold">Please fix the following errors:</p>
@@ -21,7 +31,7 @@
             @endif
 
             <div class="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                <form action="{{ route('resource-officer.import.upload') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
+                <form action="{{ $importAction ?? route('resource-officer.import.upload') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
                     @csrf
 
                     <div>
@@ -36,7 +46,9 @@
                             <li><strong>Sr#</strong> &mdash; will be used as the item ID (required, unique)</li>
                             <li><strong>Item Description</strong> &mdash; item description (required)</li>
                             <li><strong>Quantity In Hand (Current)</strong> &mdash; current quantity (required)</li>
+                            <li><strong>Operation imports</strong> automatically prefix SR# values with <strong>OP</strong></li>
                             <li><strong>Category Name</strong> &mdash; item category</li>
+                            <li><strong>Location</strong> &mdash; item location</li>
                             <li><strong>Venue</strong> &mdash; location</li>
                             <li><strong>Barcode#</strong> &mdash; barcode</li>
                             <li><strong>Supplier</strong> &mdash; supplier</li>

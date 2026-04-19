@@ -73,9 +73,17 @@
                                                 <option value="{{ $location }}" {{ ($locationFilter ?? '') === $location ? 'selected' : '' }}>{{ $location }}</option>
                                             @endforeach
                                         </select>
+                                        <label for="venue" class="text-sm text-slate-700">Venue:</label>
+                                        <select id="venue" name="venue" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
+                                            <option value="">All</option>
+                                            @foreach($venues as $venue)
+                                                <option value="{{ $venue }}" {{ ($venueFilter ?? '') === $venue ? 'selected' : '' }}>{{ $venue }}</option>
+                                            @endforeach
+                                        </select>
                                     </form>
                                     <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
                                         <input type="hidden" name="location" value="{{ $locationFilter ?? '' }}" />
+                                        <input type="hidden" name="venue" value="{{ $venueFilter ?? '' }}" />
                                         <label for="per_page" class="text-sm text-slate-700">Items per page:</label>
                                         <select id="per_page" name="per_page" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
                                             <option value="5" {{ ($perPage ?? 10) == 5 ? 'selected' : '' }}>5</option>
@@ -327,7 +335,8 @@
                     const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
                     const perPage = new URLSearchParams(window.location.search).get('per_page') || '10';
                     
-                    fetch(`/users/search-items?search=${encodeURIComponent(query)}&location=${encodeURIComponent(locationFilter)}&per_page=${perPage}`, {
+                    const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
+                    fetch(`/users/search-items?search=${encodeURIComponent(query)}&location=${encodeURIComponent(locationFilter)}&venue=${encodeURIComponent(venueFilter)}&per_page=${perPage}`, {
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest',
                             'Accept': 'application/json'
@@ -398,8 +407,9 @@
         function clearSearch() {
             document.getElementById('searchInput').value = '';
             const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
+            const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
             const perPage = new URLSearchParams(window.location.search).get('per_page') || '10';
-            window.location.href = `?per_page=${perPage}&location=${locationFilter}`;
+            window.location.href = `?per_page=${perPage}&location=${locationFilter}&venue=${venueFilter}`;
         }
 
         function showBorrowModal(itemId, itemName, maxQuantity) {

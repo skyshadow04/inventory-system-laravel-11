@@ -29,6 +29,7 @@ class User extends Authenticatable
         'is_resource_officer',
         'is_verified',
         'is_superadmin',
+        'user_group',
     ];
 
     /**

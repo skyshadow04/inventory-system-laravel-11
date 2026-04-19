@@ -30,14 +30,27 @@ class SuperAdminController extends Controller
     /**
      * Approve (verify) a user account.
      */
-    public function approveUser(User $user)
+    public function approveUser(Request $request, User $user)
     {
         // Prevent approving already verified users
         if ($user->is_verified) {
             return redirect()->route('superadmin.user-management')->with('info', 'User is already verified.');
         }
 
-        $user->update(['is_verified' => true]);
+        $data = $request->validate([
+            'role' => 'nullable|in:general,manager,resource_officer,superadmin',
+            'user_group' => 'nullable|string|max:255',
+        ]);
+
+        $role = $data['role'] ?? 'general';
+
+        $user->update([
+            'is_verified' => true,
+            'is_manager' => $role === 'manager',
+            'is_resource_officer' => $role === 'resource_officer',
+            'is_superadmin' => $role === 'superadmin',
+            'user_group' => $data['user_group'] ?? 'General',
+        ]);
 
         return redirect()->route('superadmin.user-management')->with('success', "User '{$user->name}' has been approved and can now login.");
     }

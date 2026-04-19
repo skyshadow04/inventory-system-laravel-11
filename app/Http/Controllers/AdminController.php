@@ -20,8 +20,36 @@ class AdminController extends Controller
         $returnsPerPage = $request->query('returns_per_page', 5);
         $returnsPerPage = in_array($returnsPerPage, [5, 10, 100]) ? (int) $returnsPerPage : 5;
         $searchQuery = $request->query('search');
+        $locationFilter = $request->query('location');
+        $venueFilter = $request->query('venue');
 
-        $items = Item::orderBy('created_at', 'desc')->paginate($perPage);
+        $locations = Item::whereNotNull('location')
+            ->where('location', '!=', '')
+            ->distinct()
+            ->orderBy('location')
+            ->pluck('location');
+        $venues = Item::whereNotNull('venue')
+            ->where('venue', '!=', '')
+            ->distinct()
+            ->orderBy('venue')
+            ->pluck('venue');
+
+        $itemsQuery = Item::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $itemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $itemsQuery->where('venue', $venueFilter);
+        }
+        if ($searchQuery) {
+            $itemsQuery->where(function ($query) use ($searchQuery) {
+                $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+            });
+        }
+
+        $items = $itemsQuery->paginate($perPage);
         $borrowRequests = BorrowRequest::with('user', 'item')
             ->where('status', 'pending')
             ->latest('created_at')
@@ -31,7 +59,7 @@ class AdminController extends Controller
             ->latest('borrowed_at')
             ->paginate($borrowedPerPage, ['*'], 'borrowed_page');
 
-        return view('admin.adminView', compact('items', 'perPage', 'borrowRequests', 'borrowedItems', 'borrowedPerPage', 'requestsPerPage', 'searchQuery'));
+        return view('admin.adminView', compact('items', 'perPage', 'borrowRequests', 'borrowedItems', 'borrowedPerPage', 'requestsPerPage', 'searchQuery', 'locationFilter', 'venueFilter', 'locations', 'venues'));
     }
 
     public function approveBorrowRequest(BorrowRequest $borrowRequest)
@@ -133,8 +161,27 @@ class AdminController extends Controller
         $perPage = $request->query('per_page', 5);
         $perPage = in_array($perPage, [5, 10, 100]) ? (int) $perPage : 5;
         $searchQuery = $request->query('search');
+        $locationFilter = $request->query('location');
+        $venueFilter = $request->query('venue');
+
+        $locations = Item::whereNotNull('location')
+            ->where('location', '!=', '')
+            ->distinct()
+            ->orderBy('location')
+            ->pluck('location');
+        $venues = Item::whereNotNull('venue')
+            ->where('venue', '!=', '')
+            ->distinct()
+            ->orderBy('venue')
+            ->pluck('venue');
 
         $itemsQuery = Item::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $itemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $itemsQuery->where('venue', $venueFilter);
+        }
         if ($searchQuery) {
             $itemsQuery->where(function ($query) use ($searchQuery) {
                 $query->where('item_description', 'like', '%' . $searchQuery . '%')
@@ -144,15 +191,23 @@ class AdminController extends Controller
         }
         $items = $itemsQuery->paginate($perPage);
 
-        return view('admin.adminView', compact('items', 'perPage', 'searchQuery'));
+        return view('admin.adminView', compact('items', 'perPage', 'searchQuery', 'locationFilter', 'venueFilter', 'locations', 'venues'));
     }
 
     public function searchAdminItems(Request $request)
     {
         $search = $request->query('search', '');
+        $locationFilter = $request->query('location');
+        $venueFilter = $request->query('venue');
         $perPage = $request->query('per_page', 5);
 
         $itemsQuery = Item::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $itemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $itemsQuery->where('venue', $venueFilter);
+        }
         
         if ($search) {
             $itemsQuery->where(function ($query) use ($search) {

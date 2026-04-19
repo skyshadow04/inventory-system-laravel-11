@@ -40,6 +40,12 @@
                 </div>
 
                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Location</label>
+                    <input type="text" name="location" value="{{ old('location', $item->location) }}" class="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
+                    @error('location')<p class="text-red-500 text-sm mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                <div>
                     <label class="block text-sm font-medium text-gray-700">Barcode#</label>
                     <input type="text" name="barcode" value="{{ old('barcode', $item->barcode) }}" class="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />
                     @error('barcode')<p class="text-red-500 text-sm mt-1">{{ $message }}</p>@enderror

@@ -17,8 +17,14 @@ class UserController extends Controller
         $currentBorrowedPage = $request->query('current_page', 1);
         $historyPage = $request->query('history_page', 1);
         $locationFilter = $request->query('location');
+        $venueFilter = $request->query('venue');
         $searchQuery = $request->query('search');
-        $locations = Item::whereNotNull('venue')
+        $locations = Item::whereNotNull('location')
+            ->where('location', '!=', '')
+            ->distinct()
+            ->orderBy('location')
+            ->pluck('location');
+        $venues = Item::whereNotNull('venue')
             ->where('venue', '!=', '')
             ->distinct()
             ->orderBy('venue')
@@ -26,7 +32,10 @@ class UserController extends Controller
 
         $itemsQuery = Item::orderBy('created_at', 'desc');
         if ($locationFilter) {
-            $itemsQuery->where('venue', $locationFilter);
+            $itemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $itemsQuery->where('venue', $venueFilter);
         }
         if ($searchQuery) {
             $itemsQuery->where(function ($query) use ($searchQuery) {
@@ -57,7 +66,7 @@ class UserController extends Controller
         $pendingRequestItemIds = $pendingRequests->pluck('item_id')->toArray();
         $approvedRequestItemIds = $approvedRequests->pluck('item_id')->toArray();
 
-        return view('users.user', compact('items', 'perPage', 'borrowHistory', 'currentBorrowed', 'currentPerPage', 'historyPerPage', 'pendingRequests', 'pendingRequestItemIds', 'approvedRequestItemIds', 'locationFilter', 'locations', 'searchQuery'));
+        return view('users.user', compact('items', 'perPage', 'borrowHistory', 'currentBorrowed', 'currentPerPage', 'historyPerPage', 'pendingRequests', 'pendingRequestItemIds', 'approvedRequestItemIds', 'locationFilter', 'venueFilter', 'locations', 'venues', 'searchQuery'));
     }
 
     public function borrow(Item $item, Request $request)
@@ -125,12 +134,16 @@ class UserController extends Controller
     {
         $search = $request->query('search', '');
         $locationFilter = $request->query('location');
+        $venueFilter = $request->query('venue');
         $perPage = $request->query('per_page', 10);
 
         $itemsQuery = Item::orderBy('created_at', 'desc');
         
         if ($locationFilter) {
-            $itemsQuery->where('venue', $locationFilter);
+            $itemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $itemsQuery->where('venue', $venueFilter);
         }
         
         if ($search) {

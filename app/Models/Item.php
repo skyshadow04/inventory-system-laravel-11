@@ -13,13 +13,14 @@ class Item extends Model
 
     protected $primaryKey = 'sr_number';
     public $incrementing = false;
-    protected $keyType = 'integer';
+    protected $keyType = 'string';
 
     protected $fillable = [
         'sr_number',
         'category_name',
         'item_description',
         'venue',
+        'location',
         'barcode',
         'supplier',
         'total_in',

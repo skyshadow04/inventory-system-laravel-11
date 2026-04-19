@@ -50,6 +50,12 @@ Route::middleware(['auth', 'resource-officer'])->group(function () {
     Route::get('resource-officer/form', [App\Http\Controllers\ResourceOfficerController::class, 'form'])->name('resource-officer.form');
     Route::get('resource-officer/import', [App\Http\Controllers\ResourceOfficerController::class, 'importForm'])->name('resource-officer.import');
     Route::post('resource-officer/import', [App\Http\Controllers\ResourceOfficerController::class, 'import'])->name('resource-officer.import.upload');
+    Route::get('resource-officer/import-engineering', [App\Http\Controllers\ResourceOfficerController::class, 'importEngineeringForm'])->name('resource-officer.import-engineering');
+    Route::post('resource-officer/import-engineering', [App\Http\Controllers\ResourceOfficerController::class, 'importEngineering'])->name('resource-officer.import-engineering.upload');
+    Route::get('resource-officer/import-operation', [App\Http\Controllers\ResourceOfficerController::class, 'importOperationForm'])->name('resource-officer.import-operation');
+    Route::post('resource-officer/import-operation', [App\Http\Controllers\ResourceOfficerController::class, 'importOperation'])->name('resource-officer.import-operation.upload');
+    Route::get('resource-officer/import-mechanical', [App\Http\Controllers\ResourceOfficerController::class, 'importMechanicalForm'])->name('resource-officer.import-mechanical');
+    Route::post('resource-officer/import-mechanical', [App\Http\Controllers\ResourceOfficerController::class, 'importMechanical'])->name('resource-officer.import-mechanical.upload');
     Route::post('resource-officer/inventory', [App\Http\Controllers\ResourceOfficerController::class, 'inventory'])->name('resource-officer.inventory');
     Route::get('resource-officer/item/{item}/edit', [App\Http\Controllers\ResourceOfficerController::class, 'edit'])->name('resource-officer.item.edit');
     Route::put('resource-officer/item/{item}', [App\Http\Controllers\ResourceOfficerController::class, 'update'])->name('resource-officer.item.update');

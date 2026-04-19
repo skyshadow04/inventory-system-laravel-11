@@ -4,15 +4,24 @@
             <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 class="text-2xl font-bold text-slate-800">Inventory Management</h1>
                 <div class="flex flex-wrap gap-2">
-                    <a href="{{ route('resource-officer.form') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">Add Items</a>
-                    <a href="{{ route('resource-officer.import') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Items</a>
-                    <!-- <a href="{{ route('resource-officer.borrow-history.export') }}" class="inline-flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg shadow hover:bg-slate-900">Export Borrow History</a> -->
+                    <?php
+                    //   <a href="{{ route('resource-officer.form') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">Add Items</a> --> -->
+                    ?>
+                    <a href="{{ route('resource-officer.import') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import APP Items</a>
+                    <a href="{{ route('resource-officer.import-engineering') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Engineering Items</a>
+                    <a href="{{ route('resource-officer.import-operation') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Operation Items</a>
+                    <a href="{{ route('resource-officer.import-mechanical') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Mechanical Items</a>
                 </div>
             </div>
 
             @if (session('success'))
                 <div class="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
                     {{ session('success') }}
+                </div>
+            @endif
+            @if (session('info'))
+                <div class="mb-4 p-4 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg">
+                    {{ session('info') }}
                 </div>
             @endif
 
@@ -32,7 +41,7 @@
                         </div>
                     </div>
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
+                        <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2 flex-wrap">
                             <input type="hidden" name="per_page" value="{{ $perPage ?? 5 }}" />
                             <label for="location" class="text-sm text-slate-700">Location:</label>
                             <select id="location" name="location" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
@@ -41,9 +50,17 @@
                                     <option value="{{ $location }}" {{ ($locationFilter ?? '') === $location ? 'selected' : '' }}>{{ $location }}</option>
                                 @endforeach
                             </select>
+                            <label for="venue" class="text-sm text-slate-700">Venue:</label>
+                            <select id="venue" name="venue" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
+                                <option value="">All</option>
+                                @foreach($venues as $venue)
+                                    <option value="{{ $venue }}" {{ ($venueFilter ?? '') === $venue ? 'selected' : '' }}>{{ $venue }}</option>
+                                @endforeach
+                            </select>
                         </form>
                         <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
                             <input type="hidden" name="location" value="{{ $locationFilter ?? '' }}" />
+                            <input type="hidden" name="venue" value="{{ $venueFilter ?? '' }}" />
                             <label for="per_page" class="text-sm text-slate-700">Items per page:</label>
                             <select id="per_page" name="per_page" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
                                 <option value="5" {{ ($perPage ?? 5) == 5 ? 'selected' : '' }}>5</option>
@@ -441,9 +458,10 @@
                     
                     searchTimeout = setTimeout(() => {
                         const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
+                        const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
                         const perPage = new URLSearchParams(window.location.search).get('per_page') || '5';
                         
-                        fetch(`/resource-officer/search-items?search=${encodeURIComponent(query)}&location=${encodeURIComponent(locationFilter)}&per_page=${perPage}`, {
+                        fetch(`/resource-officer/search-items?search=${encodeURIComponent(query)}&location=${encodeURIComponent(locationFilter)}&venue=${encodeURIComponent(venueFilter)}&per_page=${perPage}`, {
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest',
                                 'Accept': 'application/json'
@@ -514,8 +532,9 @@
             function clearSearch() {
                 document.getElementById('searchInput').value = '';
                 const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
+                const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
                 const perPage = new URLSearchParams(window.location.search).get('per_page') || '5';
-                window.location.href = `?per_page=${perPage}&location=${locationFilter}`;
+                window.location.href = `?per_page=${perPage}&location=${locationFilter}&venue=${venueFilter}`;
             }
         });
     </script>

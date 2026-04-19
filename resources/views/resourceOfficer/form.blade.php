@@ -32,6 +32,10 @@
                             <input type="text" name="venue[]" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g. Room 101" />
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-700">Location</label>
+                            <input type="text" name="location[]" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g. Building A" />
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Barcode</label>
                             <input type="text" name="barcode[]" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g. 123456789" />
                         </div>

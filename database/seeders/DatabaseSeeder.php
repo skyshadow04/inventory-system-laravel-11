@@ -28,9 +28,29 @@ class DatabaseSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'test@example.com'],
+            ['email' => 'test.app@example.com'],
             [
-                'name' => 'Test User',
+                'name' => 'Test App User',
+                'password' => bcrypt('password'),
+                'is_manager' => false,
+                'is_verified' => false, // Marked as verified for testing
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'test.eng@example.com'],
+            [
+                'name' => 'Test Engineering User',
+                'password' => bcrypt('password'),
+                'is_manager' => false,
+                'is_verified' => false, // Marked as verified for testing
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'test.ops@example.com'],
+            [
+                'name' => 'Test Operations User',
                 'password' => bcrypt('password'),
                 'is_manager' => false,
                 'is_verified' => true, // Marked as verified for testing
@@ -38,9 +58,19 @@ class DatabaseSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'manager@example.com'],
+            ['email' => 'test.mech@example.com'],
             [
-                'name' => 'Manager User',
+                'name' => 'Test Mechanical User',
+                'password' => bcrypt('password'),
+                'is_manager' => false,
+                'is_verified' => true, // Marked as verified for testing
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'manager.app@example.com'],
+            [
+                'name' => 'Manager App User',
                 'password' => bcrypt('password'),
                 'is_manager' => true,
                 'is_verified' => false, // Unverified - pending super admin approval
@@ -48,7 +78,37 @@ class DatabaseSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'resource_officer@example.com'],
+            ['email' => 'manager.eng@example.com'],
+            [
+                'name' => 'Manager Engineering User',
+                'password' => bcrypt('password'),
+                'is_manager' => true,
+                'is_verified' => false, // Unverified - pending super admin approval
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'manager.ops@example.com'],
+            [
+                'name' => 'Manager Operations User',
+                'password' => bcrypt('password'),
+                'is_manager' => true,
+                'is_verified' => false, // Unverified - pending super admin approval
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'manager.mech@example.com'],
+            [
+                'name' => 'Manager Mechanical User',
+                'password' => bcrypt('password'),
+                'is_manager' => true,
+                'is_verified' => false, // Unverified - pending super admin approval
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'store.keeper@example.com'],
             [
                 'name' => 'Resource Officer Tester',
                 'password' => bcrypt('password'),
