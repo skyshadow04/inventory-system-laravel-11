@@ -90,6 +90,32 @@ class SuperAdminController extends Controller
     }
 
     /**
+     * Update user account details.
+     */
+    public function updateUser(Request $request, User $user)
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
+            'role' => 'nullable|in:general,manager,resource_officer,superadmin',
+            'user_group' => 'nullable|string|max:255',
+        ]);
+
+        $role = $data['role'] ?? 'general';
+
+        $user->update([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'is_manager' => $role === 'manager',
+            'is_resource_officer' => $role === 'resource_officer',
+            'is_superadmin' => $role === 'superadmin',
+            'user_group' => $data['user_group'] ?? 'General',
+        ]);
+
+        return redirect()->route('superadmin.user-management')->with('success', "User '{$user->name}' has been updated successfully.");
+    }
+
+    /**
      * Display the super admin dashboard.
      */
     public function dashboard()

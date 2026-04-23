@@ -4,9 +4,10 @@
             <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 class="text-2xl font-bold text-slate-800">Inventory Management</h1>
                 <div class="flex flex-wrap gap-2">
-                    <?php
-                    //   <a href="{{ route('resource-officer.form') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">Add Items</a> --> -->
+                    <?php 
                     ?>
+                    <a href="{{ route('resource-officer.form') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">Add Items</a> 
+                    
                     <a href="{{ route('resource-officer.import') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import APP Items</a>
                     <a href="{{ route('resource-officer.import-engineering') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Engineering Items</a>
                     <a href="{{ route('resource-officer.import-operation') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Operation Items</a>

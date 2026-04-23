@@ -29,33 +29,153 @@ class ResourceOfficerController extends Controller
         $locationFilter = $request->query('location');
         $venueFilter = $request->query('venue');
         $searchQuery = $request->query('search');
-        $locations = Item::whereNotNull('location')
-            ->where('location', '!=', '')
-            ->distinct()
-            ->orderBy('location')
-            ->pluck('location');
-        $venues = Item::whereNotNull('venue')
-            ->where('venue', '!=', '')
-            ->distinct()
-            ->orderBy('venue')
-            ->pluck('venue');
 
-        $itemsQuery = Item::orderBy('created_at', 'desc');
+        // Get unique locations and venues from all item tables
+        $locationsQuery = Item::whereNotNull('location')->where('location', '!=', '');
+        $locationsQuery->union(EngineeringItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
+        $locationsQuery->union(OperationItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
+        $locationsQuery->union(MechanicalItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
+        $locations = $locationsQuery->distinct()->orderBy('location')->pluck('location');
+
+        $venuesQuery = Item::whereNotNull('venue')->where('venue', '!=', '');
+        $venuesQuery->union(EngineeringItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
+        $venuesQuery->union(OperationItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
+        $venues = $venuesQuery->distinct()->orderBy('venue')->pluck('venue');
+
+        // Query all item types with filters
+        $itemsCollections = [];
+
+        // Main items
+        $mainItemsQuery = Item::orderBy('created_at', 'desc');
         if ($locationFilter) {
-            $itemsQuery->where('location', $locationFilter);
+            $mainItemsQuery->where('location', $locationFilter);
         }
         if ($venueFilter) {
-            $itemsQuery->where('venue', $venueFilter);
+            $mainItemsQuery->where('venue', $venueFilter);
         }
         if ($searchQuery) {
-            $itemsQuery->where(function ($query) use ($searchQuery) {
+            $mainItemsQuery->where(function ($query) use ($searchQuery) {
                 $query->where('item_description', 'like', '%' . $searchQuery . '%')
                     ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
                     ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
             });
         }
+        $mainItems = $mainItemsQuery->get()->map(function ($item) {
+            $item->item_type = 'main';
+            return $item;
+        });
+        $itemsCollections[] = $mainItems;
 
-        $items = $itemsQuery->paginate($perPage)->withQueryString();
+        // Engineering items
+        $engItemsQuery = EngineeringItem::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $engItemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $engItemsQuery->where('venue', $venueFilter);
+        }
+        if ($searchQuery) {
+            $engItemsQuery->where(function ($query) use ($searchQuery) {
+                $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%');
+            });
+        }
+        $engItems = $engItemsQuery->get()->map(function ($item) {
+            $item->item_type = 'engineering';
+            // Map fields to match main items structure
+            $item->sr_number = $item->sr_number;
+            $item->item_description = $item->item_description;
+            $item->supplier = null; // Not available in eng items
+            $item->total_in = null;
+            $item->total_out = null;
+            $item->total_return = null;
+            $item->quantity_in_hand_current = $item->quantity_in_hand ?? 0;
+            $item->reconciliation = null;
+            $item->difference = null;
+            return $item;
+        });
+        $itemsCollections[] = $engItems;
+
+        // Operations items
+        $opsItemsQuery = OperationItem::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $opsItemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $opsItemsQuery->where('venue', $venueFilter);
+        }
+        if ($searchQuery) {
+            $opsItemsQuery->where(function ($query) use ($searchQuery) {
+                $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+            });
+        }
+        $opsItems = $opsItemsQuery->get()->map(function ($item) {
+            $item->item_type = 'operations';
+            // Map fields to match main items structure
+            $item->sr_number = $item->sr_no;
+            $item->item_description = $item->item_description;
+            $item->quantity_in_hand_current = $item->quantity_in_hand ?? 0;
+            $item->reconciliation = $item->reconciliation ?? 0;
+            $item->difference = $item->difference ?? 0;
+            return $item;
+        });
+        $itemsCollections[] = $opsItems;
+
+        // Mechanical items
+        $mechItemsQuery = MechanicalItem::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $mechItemsQuery->where('location', $locationFilter);
+        }
+        if ($searchQuery) {
+            $mechItemsQuery->where(function ($query) use ($searchQuery) {
+                $query->where('description', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%');
+            });
+        }
+        $mechItems = $mechItemsQuery->get()->map(function ($item) {
+            $item->item_type = 'mechanical';
+            // Map fields to match main items structure
+            $item->sr_number = $item->sr_no;
+            $item->item_description = $item->description;
+            $item->supplier = null;
+            $item->venue = null; // Not available in mech items
+            $item->barcode = null;
+            $item->total_in = null;
+            $item->total_out = null;
+            $item->total_return = null;
+            $item->quantity_in_hand_current = $item->balance_qty_in_store ?? 0;
+            $item->physical_stock = $item->balance_qty_in_store ?? 0;
+            $item->reconciliation = null;
+            $item->difference = null;
+            return $item;
+        });
+        $itemsCollections[] = $mechItems;
+
+        // Combine all collections and sort by created_at
+        $allItems = collect();
+        foreach ($itemsCollections as $collection) {
+            $allItems = $allItems->merge($collection);
+        }
+        $allItems = $allItems->sortByDesc('created_at');
+
+        // Manual pagination
+        $page = $request->query('page', 1);
+        $offset = ($page - 1) * $perPage;
+        $paginatedItems = $allItems->slice($offset, $perPage);
+        $totalItems = $allItems->count();
+
+        // Create a LengthAwarePaginator manually
+        $items = new \Illuminate\Pagination\LengthAwarePaginator(
+            $paginatedItems,
+            $totalItems,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'pageName' => 'page']
+        );
+        $items->appends($request->except('page'));
+
         $approvedRequests = BorrowRequest::with('user', 'item')
             ->where('status', 'accepted')
             ->latest('created_at')
@@ -95,7 +215,20 @@ class ResourceOfficerController extends Controller
             fputcsv($handle, ['User', 'Item ID', 'Description', 'Quantity', 'Borrowed At', 'Returned At', 'Status', 'Return Notes']);
 
             foreach ($borrowHistory as $history) {
-                $status = $history->return_status === 'approved' ? 'Returned' : ($history->return_status === 'rejected' ? 'Rejected' : 'Completed');
+                $status = $history->return_status === 'approved' ? 'Success' : ($history->return_status === 'rejected' ? 'Rejected' : 'Completed');
+                
+                // Set appropriate return notes based on status
+                $returnNotes = $history->admin_return_notes;
+                if (empty($returnNotes)) {
+                    if ($status === 'Success') {
+                        $returnNotes = 'Successfully returned';
+                    } elseif ($status === 'Rejected') {
+                        $returnNotes = 'Return rejected';
+                    } else {
+                        $returnNotes = '–';
+                    }
+                }
+                
                 fputcsv($handle, [
                     $history->user->name ?? '–',
                     $history->item_id,
@@ -104,7 +237,7 @@ class ResourceOfficerController extends Controller
                     $history->borrowed_at->format('Y-m-d H:i:s'),
                     $history->returned_at->format('Y-m-d H:i:s'),
                     $status,
-                    $history->admin_return_notes ?? '–',
+                    $returnNotes,
                 ]);
             }
 
@@ -112,45 +245,6 @@ class ResourceOfficerController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
-    }
-
-    public function edit(Item $item)
-    {
-        return view('resourceOfficer.edit', compact('item'));
-    }
-
-    public function update(Request $request, Item $item)
-    {
-        $validated = $request->validate([
-            'sr_number' => 'required|integer|unique:items,sr_number,' . $item->sr_number . ',sr_number',
-            'item_description' => 'required|string|max:255',
-            'quantity_in_hand_current' => 'nullable|numeric|min:0',
-            'category_name' => 'nullable|string|max:255',
-            'supplier' => 'nullable|string|max:255',
-            'venue' => 'nullable|string|max:255',
-            'location' => 'nullable|string|max:255',
-            'barcode' => 'nullable|string|max:255',
-            'total_in' => 'nullable|numeric|min:0',
-            'total_out' => 'nullable|numeric|min:0',
-            'total_return' => 'nullable|numeric|min:0',
-            'physical_stock' => 'required|numeric|min:0',
-            'reconciliation' => 'nullable|string|max:255',
-            'difference' => 'nullable|numeric',
-            'remarks' => 'nullable|string',
-        ]);
-
-        $validated['availability'] = ($validated['physical_stock'] ?? 0) > 0 ? 'available' : 'out_of_stock';
-
-        $item->update($validated);
-
-        return redirect()->route('resource-officer.item.edit', $item)->with('success', 'Item updated successfully!');
-    }
-
-    public function destroy(Item $item)
-    {
-        $item->delete();
-
-        return redirect()->route('resource-officer')->with('success', 'Item deleted successfully!');
     }
 
     public function releaseBorrowRequest(BorrowRequest $borrowRequest)
@@ -183,7 +277,7 @@ class ResourceOfficerController extends Controller
             return redirect()->back()->with('error', 'This return request has already been processed.');
         }
 
-        $item = $borrowHistory->item;
+        $item = $borrowHistory->getItem();
         $item->physical_stock += $borrowHistory->count;
         $item->availability = ($item->physical_stock ?? 0) > 0 ? 'available' : 'out_of_stock';
         $item->save();
@@ -215,7 +309,9 @@ class ResourceOfficerController extends Controller
 
     public function form()
     {
-        return view('resourceOfficer.form');
+        return view('resourceOfficer.form', [
+            'nextAppSrNumber' => $this->getNextAppSrNumber(),
+        ]);
     }
 
     public function importForm()
@@ -263,13 +359,14 @@ class ResourceOfficerController extends Controller
                 'Sr# — will be used as the item ID (required, unique)',
                 'Description — item description (required)',
                 'Total Qty — total quantity (required)',
+                '<strong>Mechanical imports</strong> automatically prefix SR# values with <strong>ME</strong>',
                 'Category Name — item category',
                 'Precision Measurement Class 1 — measurement classification',
                 'Location — item location',
                 'W 18 B — zone quantity',
                 'W 17 — zone quantity',
                 'W 18 A Compressor Area — zone quantity',
-                'Balance Qty In Store — remaining inventory',
+                '<strong>Balance Qty In Store</strong> — remaining inventory (determines availability)',
                 'Remarks — additional notes',
             ],
         ]);
@@ -382,7 +479,7 @@ class ResourceOfficerController extends Controller
                             $itemData[$mappedColumn] = null;
                         }
                     } else {
-                        $itemData[$mappedColumn] = $srValue !== '' && is_numeric($srValue) ? (int) $srValue : null;
+                        $itemData[$mappedColumn] = $srValue !== '' ? $srValue : null;
                     }
                 } else {
                     $itemData[$mappedColumn] = $value;
@@ -440,10 +537,11 @@ class ResourceOfficerController extends Controller
         if (!empty($rowSrNumbers)) {
             $existingSrNumbers = $modelClass::whereIn($srColumn, array_keys($rowSrNumbers))
                 ->pluck($srColumn)
+                ->map(fn($num) => (string) $num)
                 ->toArray();
 
             if (!empty($existingSrNumbers)) {
-                $importRows = array_filter($importRows, fn($itemData) => !in_array($itemData['sr_number'], $existingSrNumbers, true));
+                $importRows = array_filter($importRows, fn($itemData) => !in_array((string) $itemData['sr_number'], $existingSrNumbers, true));
             }
         }
 
@@ -569,6 +667,21 @@ class ResourceOfficerController extends Controller
 
                 if (in_array($mappedColumn, ['total_qty', 'w_18_b', 'w_17', 'w_18_a_compressor_area', 'balance_qty_in_store'], true)) {
                     $itemData[$mappedColumn] = is_numeric($value) ? (int) $value : 0;
+                } elseif ($mappedColumn === 'sr_no') {
+                    $srValue = trim((string) ($value ?? ''));
+                    if (preg_match('/^me(\d+)$/i', $srValue, $matches)) {
+                        $itemData[$mappedColumn] = 'ME' . ltrim($matches[1], '0');
+                    } elseif (is_numeric($srValue)) {
+                        $itemData[$mappedColumn] = 'ME' . (int) $srValue;
+                    } elseif ($srValue !== '') {
+                        $normalized = strtoupper($srValue);
+                        if (!str_starts_with($normalized, 'ME')) {
+                            $normalized = 'ME' . ltrim($normalized, 'ME');
+                        }
+                        $itemData[$mappedColumn] = $normalized;
+                    } else {
+                        $itemData[$mappedColumn] = null;
+                    }
                 } else {
                     $itemData[$mappedColumn] = $value;
                 }
@@ -609,7 +722,7 @@ class ResourceOfficerController extends Controller
 
         $imported = 0;
         foreach ($importRows as $itemData) {
-            $itemData['availability'] = ($itemData['total_qty'] ?? 0) > 0 ? 'Available' : 'Unavailable';
+            $itemData['availability'] = ($itemData['balance_qty_in_store'] ?? 0) > 0 ? 'available' : 'out_of_stock';
             MechanicalItem::create($itemData);
             $imported++;
         }
@@ -650,8 +763,77 @@ class ResourceOfficerController extends Controller
 
     public function inventory(Request $request)
     {
-        // Validate the incoming array data
+        $location = $request->input('selected_location');
+
+        if (!$location || !in_array($location, ['APP', 'Engg / INS', 'ENGG / MEC', 'OPTNS'])) {
+            return redirect()->back()->withErrors(['location' => 'Invalid location selected']);
+        }
+
+        if ($location === 'APP') {
+            return $this->saveAppItems($request);
+        } elseif ($location === 'Engg / INS') {
+            return $this->saveEngineeringItems($request);
+        } elseif ($location === 'ENGG / MEC') {
+            return $this->saveMechanicalItems($request);
+        } elseif ($location === 'OPTNS') {
+            return $this->saveOperationItems($request);
+        }
+
+        return redirect()->route('resource-officer')->with('error', 'Invalid location');
+    }
+
+    private function getNextAppSrNumber()
+    {
+        $lastSRNumber = Item::selectRaw('MAX(CAST(sr_number AS UNSIGNED)) as max_sr')->value('max_sr');
+
+        if ($lastSRNumber !== null) {
+            return $lastSRNumber + 1;
+        }
+
+        return 1000;
+    }
+
+    private function getNextEngineeringSrNumber()
+    {
+        $lastItem = EngineeringItem::where('sr_number', 'like', 'E%')
+            ->orderByRaw('CAST(SUBSTRING(sr_number, 2) AS UNSIGNED) desc')
+            ->first();
+        if (!$lastItem) {
+            return 'E001';
+        }
+        $lastNumber = (int) substr($lastItem->sr_number, 1);
+        return 'E' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function getNextMechanicalSrNumber()
+    {
+        $lastItem = MechanicalItem::where('sr_no', 'like', 'M%')
+            ->orderByRaw('CAST(SUBSTRING(sr_no, 2) AS UNSIGNED) desc')
+            ->first();
+        if (!$lastItem) {
+            return 'M001';
+        }
+        $lastNumber = (int) substr($lastItem->sr_no, 1);
+        return 'M' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function getNextOperationSrNumber()
+    {
+        $lastItem = OperationItem::where('sr_no', 'like', 'OP%')
+            ->orderByRaw('CAST(SUBSTRING(sr_no, 3) AS UNSIGNED) desc')
+            ->first();
+        if (!$lastItem) {
+            return 'OP001';
+        }
+        $lastNumber = (int) substr($lastItem->sr_no, 2);
+        return 'OP' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function saveAppItems(Request $request)
+    {
         $validated = $request->validate([
+            'sr_number' => 'nullable|array',
+            'sr_number.*' => 'nullable|integer|min:1',
             'item_description' => 'required|array|min:1',
             'item_description.*' => 'required|string|max:255',
             'category_name' => 'nullable|array',
@@ -660,8 +842,6 @@ class ResourceOfficerController extends Controller
             'supplier.*' => 'nullable|string|max:255',
             'venue' => 'nullable|array',
             'venue.*' => 'nullable|string|max:255',
-            'location' => 'nullable|array',
-            'location.*' => 'nullable|string|max:255',
             'barcode' => 'nullable|array',
             'barcode.*' => 'nullable|string|max:255',
             'total_in' => 'nullable|array',
@@ -682,17 +862,19 @@ class ResourceOfficerController extends Controller
             'remarks.*' => 'nullable|string',
         ]);
 
-        // Save each item
+        $currentSrNumber = $this->getNextAppSrNumber();
+
         foreach ($validated['item_description'] as $index => $description) {
             $quantity = $validated['physical_stock'][$index];
             $availability = $quantity > 0 ? 'available' : 'out_of_stock';
 
             Item::create([
+                'sr_number' => $currentSrNumber,
                 'item_description' => $description,
                 'category_name' => $validated['category_name'][$index] ?? null,
                 'supplier' => $validated['supplier'][$index] ?? null,
                 'venue' => $validated['venue'][$index] ?? null,
-                'location' => $validated['location'][$index] ?? null,
+                'location' => 'APP',
                 'barcode' => $validated['barcode'][$index] ?? null,
                 'total_in' => $validated['total_in'][$index] ?? 0,
                 'total_out' => $validated['total_out'][$index] ?? 0,
@@ -704,9 +886,171 @@ class ResourceOfficerController extends Controller
                 'remarks' => $validated['remarks'][$index] ?? null,
                 'availability' => $availability,
             ]);
+
+            $currentSrNumber++;
         }
 
-        return redirect()->route('resource-officer')->with('success', 'Inventory items added successfully!');
+        return redirect()->route('resource-officer')->with('success', 'APP items added successfully!');
+    }
+
+    private function saveEngineeringItems(Request $request)
+    {
+        $validated = $request->validate([
+            'item_description_eng' => 'required|array|min:1',
+            'item_description_eng.*' => 'required|string|max:255',
+            'sr_number_eng' => 'nullable|array',
+            'sr_number_eng.*' => 'nullable|string|max:255',
+            'category_name_eng' => 'nullable|array',
+            'category_name_eng.*' => 'nullable|string|max:255',
+            'make_eng' => 'nullable|array',
+            'make_eng.*' => 'nullable|string|max:255',
+            'venue_eng' => 'nullable|array',
+            'venue_eng.*' => 'nullable|string|max:255',
+            'barcode_eng' => 'nullable|array',
+            'barcode_eng.*' => 'nullable|string|max:255',
+            'quantity_in_hand_eng' => 'nullable|array',
+            'quantity_in_hand_eng.*' => 'nullable|numeric|min:0',
+            'physical_stock_eng' => 'required|array|min:1',
+            'physical_stock_eng.*' => 'required|numeric|min:0',
+            'remarks_eng' => 'nullable|array',
+            'remarks_eng.*' => 'nullable|string',
+        ]);
+
+        foreach ($validated['item_description_eng'] as $index => $description) {
+            $quantity = $validated['physical_stock_eng'][$index];
+            $availability = $quantity > 0 ? 'available' : 'out_of_stock';
+            $srNumber = $this->getNextEngineeringSrNumber();
+
+            EngineeringItem::create([
+                'sr_number' => $srNumber,
+                'item_description' => $description,
+                'category_name' => $validated['category_name_eng'][$index] ?? null,
+                'make' => $validated['make_eng'][$index] ?? null,
+                'venue' => $validated['venue_eng'][$index] ?? null,
+                'location' => 'Engg / INS',
+                'barcode' => $validated['barcode_eng'][$index] ?? null,
+                'quantity_in_hand' => $validated['quantity_in_hand_eng'][$index] ?? 0,
+                'physical_stock' => $quantity,
+                'remarks' => $validated['remarks_eng'][$index] ?? null,
+                'availability' => $availability,
+            ]);
+        }
+
+        return redirect()->route('resource-officer')->with('success', 'Engineering items added successfully!');
+    }
+
+    private function saveMechanicalItems(Request $request)
+    {
+        $validated = $request->validate([
+            'description_mech' => 'required|array|min:1',
+            'description_mech.*' => 'required|string|max:255',
+            'sr_no_mech' => 'nullable|array',
+            'sr_no_mech.*' => 'nullable|string|max:255',
+            'category_name_mech' => 'nullable|array',
+            'category_name_mech.*' => 'nullable|string|max:255',
+            'total_qty_mech' => 'nullable|array',
+            'total_qty_mech.*' => 'nullable|numeric|min:0',
+            'precision_measurement_class_1_mech' => 'nullable|array',
+            'precision_measurement_class_1_mech.*' => 'nullable|string|max:255',
+            'w_18_b_mech' => 'nullable|array',
+            'w_18_b_mech.*' => 'nullable|string|max:255',
+            'w_17_mech' => 'nullable|array',
+            'w_17_mech.*' => 'nullable|string|max:255',
+            'w_18_a_compressor_area_mech' => 'nullable|array',
+            'w_18_a_compressor_area_mech.*' => 'nullable|string|max:255',
+            'balance_qty_in_store_mech' => 'nullable|array',
+            'balance_qty_in_store_mech.*' => 'nullable|numeric|min:0',
+            'physical_stock_mech' => 'required|array|min:1',
+            'physical_stock_mech.*' => 'required|numeric|min:0',
+            'remarks_mech' => 'nullable|array',
+            'remarks_mech.*' => 'nullable|string',
+        ]);
+
+        foreach ($validated['description_mech'] as $index => $description) {
+            $quantity = $validated['physical_stock_mech'][$index];
+            $availability = $quantity > 0 ? 'available' : 'out_of_stock';
+
+            $mechanicalItem = MechanicalItem::create([
+                'description' => $description,
+                'category_name' => $validated['category_name_mech'][$index] ?? null,
+                'total_qty' => $validated['total_qty_mech'][$index] ?? 0,
+                'precision_measurement_class_1' => $validated['precision_measurement_class_1_mech'][$index] ?? null,
+                'location' => 'ENGG / MEC',
+                'w_18_b' => $validated['w_18_b_mech'][$index] ?? null,
+                'w_17' => $validated['w_17_mech'][$index] ?? null,
+                'w_18_a_compressor_area' => $validated['w_18_a_compressor_area_mech'][$index] ?? null,
+                'balance_qty_in_store' => $validated['balance_qty_in_store_mech'][$index] ?? 0,
+                'physical_stock' => $quantity,
+                'remarks' => $validated['remarks_mech'][$index] ?? null,
+                'availability' => $availability,
+            ]);
+
+            $mechanicalItem->sr_no = 'M' . $mechanicalItem->id;
+            $mechanicalItem->save();
+        }
+
+        return redirect()->route('resource-officer')->with('success', 'Mechanical items added successfully!');
+    }
+
+    private function saveOperationItems(Request $request)
+    {
+        $validated = $request->validate([
+            'item_description_ops' => 'required|array|min:1',
+            'item_description_ops.*' => 'required|string|max:255',
+            'sr_no_ops' => 'nullable|array',
+            'sr_no_ops.*' => 'nullable|string|max:255',
+            'category_name_ops' => 'nullable|array',
+            'category_name_ops.*' => 'nullable|string|max:255',
+            'supplier_ops' => 'nullable|array',
+            'supplier_ops.*' => 'nullable|string|max:255',
+            'venue_ops' => 'nullable|array',
+            'venue_ops.*' => 'nullable|string|max:255',
+            'barcode_ops' => 'nullable|array',
+            'barcode_ops.*' => 'nullable|string|max:255',
+            'total_in_ops' => 'nullable|array',
+            'total_in_ops.*' => 'nullable|numeric|min:0',
+            'total_out_ops' => 'nullable|array',
+            'total_out_ops.*' => 'nullable|numeric|min:0',
+            'total_return_ops' => 'nullable|array',
+            'total_return_ops.*' => 'nullable|numeric|min:0',
+            'quantity_in_hand_ops' => 'nullable|array',
+            'quantity_in_hand_ops.*' => 'nullable|numeric|min:0',
+            'physical_stock_ops' => 'required|array|min:1',
+            'physical_stock_ops.*' => 'required|numeric|min:0',
+            'reconciliation_ops' => 'nullable|array',
+            'reconciliation_ops.*' => 'nullable|string|max:255',
+            'difference_ops' => 'nullable|array',
+            'difference_ops.*' => 'nullable|numeric',
+            'remarks_ops' => 'nullable|array',
+            'remarks_ops.*' => 'nullable|string',
+        ]);
+
+        foreach ($validated['item_description_ops'] as $index => $description) {
+            $quantity = $validated['physical_stock_ops'][$index];
+            $availability = $quantity > 0 ? 'available' : 'out_of_stock';
+
+            $operationItem = OperationItem::create([
+                'item_description' => $description,
+                'category_name' => $validated['category_name_ops'][$index] ?? null,
+                'supplier' => $validated['supplier_ops'][$index] ?? null,
+                'venue' => $validated['venue_ops'][$index] ?? null,
+                'location' => 'OPTNS',
+                'barcode' => $validated['barcode_ops'][$index] ?? null,
+                'total_in' => $validated['total_in_ops'][$index] ?? 0,
+                'total_out' => $validated['total_out_ops'][$index] ?? 0,
+                'total_return' => $validated['total_return_ops'][$index] ?? 0,
+                'quantity_in_hand' => $validated['quantity_in_hand_ops'][$index] ?? 0,
+                'physical_stock' => $quantity,
+                'reconciliation' => $validated['reconciliation_ops'][$index] ?? null,
+                'difference' => $validated['difference_ops'][$index] ?? 0,
+                'remarks' => $validated['remarks_ops'][$index] ?? null,
+            ]);
+
+            $operationItem->sr_no = 'OP' . $operationItem->id;
+            $operationItem->save();
+        }
+
+        return redirect()->route('resource-officer')->with('success', 'Operation items added successfully!');
     }
 
     public function searchItems(Request $request)
@@ -740,5 +1084,203 @@ class ResourceOfficerController extends Controller
             'items' => $items,
             'total' => $total,
         ]);
+    }
+
+    public function edit($item)
+    {
+        $itemId = (int) $item;
+        // Since we have mixed item types, we need to find the item by checking all tables
+        // We'll use the item_type and id to determine which model to use
+        $item = null;
+        $itemType = null;
+
+        // Try to find in main items table
+        $item = Item::find($itemId);
+        if ($item) {
+            $itemType = 'main';
+        } else {
+            // Try engineering items
+            $item = EngineeringItem::find($itemId);
+            if ($item) {
+                $itemType = 'engineering';
+            } else {
+                // Try operations items
+                $item = OperationItem::find($itemId);
+                if ($item) {
+                    $itemType = 'operations';
+                } else {
+                    // Try mechanical items
+                    $item = MechanicalItem::find($itemId);
+                    if ($item) {
+                        $itemType = 'mechanical';
+                    }
+                }
+            }
+        }
+
+        if (!$item) {
+            return redirect()->route('resource-officer')->with('error', 'Item not found.');
+        }
+
+        return view('resourceOfficer.edit', compact('item', 'itemType'));
+    }
+
+    public function update(Request $request, $item)
+    {
+        $itemId = (int) $item;
+        // Find the item by checking all tables
+        $item = null;
+        $model = null;
+
+        // Try to find in main items table
+        $item = Item::find($itemId);
+        if ($item) {
+            $model = Item::class;
+        } else {
+            // Try engineering items
+            $item = EngineeringItem::find($itemId);
+            if ($item) {
+                $model = EngineeringItem::class;
+            } else {
+                // Try operations items
+                $item = OperationItem::find($itemId);
+                if ($item) {
+                    $model = OperationItem::class;
+                } else {
+                    // Try mechanical items
+                    $item = MechanicalItem::find($itemId);
+                    if ($item) {
+                        $model = MechanicalItem::class;
+                    }
+                }
+            }
+        }
+
+        if (!$item) {
+            return redirect()->route('resource-officer')->with('error', 'Item not found.');
+        }
+
+        // Validate based on item type
+        if ($model === MechanicalItem::class) {
+            $validated = $request->validate([
+                'sr_no' => 'required|string|max:255',
+                'description' => 'required|string|max:255',
+                'category_name' => 'nullable|string|max:255',
+                'total_qty' => 'nullable|integer|min:0',
+                'precision_measurement_class_1' => 'nullable|string|max:255',
+                'location' => 'nullable|string|max:255',
+                'w_18_b' => 'nullable|integer|min:0',
+                'w_17' => 'nullable|integer|min:0',
+                'w_18_a_compressor_area' => 'nullable|integer|min:0',
+                'balance_qty_in_store' => 'nullable|integer|min:0',
+                'remarks' => 'nullable|string',
+            ]);
+
+            $item->update($validated);
+            $item->availability = ($item->balance_qty_in_store ?? 0) > 0 ? 'available' : 'out_of_stock';
+            $item->save();
+        } elseif ($model === OperationItem::class) {
+            $validated = $request->validate([
+                'sr_no' => 'required|string|max:255',
+                'category_name' => 'nullable|string|max:255',
+                'item_description' => 'required|string|max:255',
+                'location' => 'nullable|string|max:255',
+                'venue' => 'nullable|string|max:255',
+                'barcode' => 'nullable|string|max:255',
+                'supplier' => 'nullable|string|max:255',
+                'total_in' => 'nullable|integer|min:0',
+                'total_out' => 'nullable|integer|min:0',
+                'total_return' => 'nullable|integer|min:0',
+                'quantity_in_hand' => 'nullable|integer|min:0',
+                'physical_stock' => 'nullable|integer|min:0',
+                'reconciliation' => 'nullable|integer',
+                'difference' => 'nullable|integer',
+                'remarks' => 'nullable|string',
+            ]);
+
+            $item->update($validated);
+        } elseif ($model === EngineeringItem::class) {
+            $validated = $request->validate([
+                'sr_number' => 'required|string|max:255',
+                'category_name' => 'nullable|string|max:255',
+                'item_description' => 'required|string|max:255',
+                'location' => 'nullable|string|max:255',
+                'venue' => 'nullable|string|max:255',
+                'barcode' => 'nullable|string|max:255',
+                'make' => 'nullable|string|max:255',
+                'quantity_in_hand' => 'nullable|integer|min:0',
+                'physical_stock' => 'nullable|integer|min:0',
+                'remarks' => 'nullable|string',
+            ]);
+
+            $item->update($validated);
+            $item->availability = ($item->physical_stock ?? 0) > 0 ? 'available' : 'out_of_stock';
+            $item->save();
+        } else {
+            // Main items
+            $validated = $request->validate([
+                'sr_number' => 'required|string|max:255',
+                'category_name' => 'nullable|string|max:255',
+                'item_description' => 'required|string|max:255',
+                'venue' => 'nullable|string|max:255',
+                'location' => 'nullable|string|max:255',
+                'barcode' => 'nullable|string|max:255',
+                'supplier' => 'nullable|string|max:255',
+                'total_in' => 'nullable|integer|min:0',
+                'total_out' => 'nullable|integer|min:0',
+                'total_return' => 'nullable|integer|min:0',
+                'quantity_in_hand_current' => 'nullable|integer|min:0',
+                'physical_stock' => 'nullable|integer|min:0',
+                'reconciliation' => 'nullable|integer',
+                'difference' => 'nullable|integer',
+                'remarks' => 'nullable|string',
+            ]);
+
+            $item->update($validated);
+            $item->availability = ($item->physical_stock ?? 0) > 0 ? 'available' : 'out_of_stock';
+            $item->save();
+        }
+
+        return redirect()->route('resource-officer')->with('success', 'Item updated successfully.');
+    }
+
+    public function destroy($item)
+    {
+        $itemId = (int) $item;
+        // Find the item by checking all tables
+        $item = null;
+        $modelName = '';
+
+        // Try to find in main items table
+        $item = Item::find($itemId);
+        if ($item) {
+            $modelName = 'main item';
+        } else {
+            // Try engineering items
+            $item = EngineeringItem::find($itemId);
+            if ($item) {
+                $modelName = 'engineering item';
+            } else {
+                // Try operations items
+                $item = OperationItem::find($itemId);
+                if ($item) {
+                    $modelName = 'operations item';
+                } else {
+                    // Try mechanical items
+                    $item = MechanicalItem::find($itemId);
+                    if ($item) {
+                        $modelName = 'mechanical item';
+                    }
+                }
+            }
+        }
+
+        if (!$item) {
+            return redirect()->route('resource-officer')->with('error', 'Item not found.');
+        }
+
+        $item->delete();
+
+        return redirect()->route('resource-officer')->with('success', ucfirst($modelName) . ' deleted successfully.');
     }
 }

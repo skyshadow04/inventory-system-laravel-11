@@ -4,11 +4,29 @@ namespace App\Http\Controllers;
 
 use App\Models\BorrowHistory;
 use App\Models\BorrowRequest;
+use App\Models\EngineeringItem;
 use App\Models\Item;
+use App\Models\MechanicalItem;
+use App\Models\OperationItem;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Schema;
 
 class AdminController extends Controller
 {
+    private function getManagerItemModel(): string
+    {
+        $userGroup = auth()->user()->user_group ?? 'APP';
+
+        return match ($userGroup) {
+            'APP' => Item::class,
+            'Engineering' => EngineeringItem::class,
+            'Mechanical' => MechanicalItem::class,
+            'Operations' => OperationItem::class,
+            default => Item::class,
+        };
+    }
+
     public function index(Request $request)
     {
         $perPage = $request->query('per_page', 5);
@@ -23,41 +41,88 @@ class AdminController extends Controller
         $locationFilter = $request->query('location');
         $venueFilter = $request->query('venue');
 
-        $locations = Item::whereNotNull('location')
+        $modelClass = $this->getManagerItemModel();
+        $tableName = (new $modelClass())->getTable();
+        $hasVenueColumn = Schema::hasColumn($tableName, 'venue');
+
+        $locations = $modelClass::whereNotNull('location')
             ->where('location', '!=', '')
             ->distinct()
             ->orderBy('location')
             ->pluck('location');
-        $venues = Item::whereNotNull('venue')
-            ->where('venue', '!=', '')
-            ->distinct()
-            ->orderBy('venue')
-            ->pluck('venue');
+        $venues = collect();
+        if ($hasVenueColumn) {
+            $venues = $modelClass::whereNotNull('venue')
+                ->where('venue', '!=', '')
+                ->distinct()
+                ->orderBy('venue')
+                ->pluck('venue');
+        }
 
-        $itemsQuery = Item::orderBy('created_at', 'desc');
+        $itemsQuery = $modelClass::orderBy('created_at', 'asc');
         if ($locationFilter) {
             $itemsQuery->where('location', $locationFilter);
         }
-        if ($venueFilter) {
+        if ($venueFilter && $hasVenueColumn) {
             $itemsQuery->where('venue', $venueFilter);
         }
         if ($searchQuery) {
-            $itemsQuery->where(function ($query) use ($searchQuery) {
-                $query->where('item_description', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+            $itemsQuery->where(function ($query) use ($searchQuery, $modelClass) {
+                if ($modelClass === MechanicalItem::class) {
+                    $query->where('description', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('category_name', 'like', '%' . $searchQuery . '%');
+                } else {
+                    $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+                }
             });
         }
 
         $items = $itemsQuery->paginate($perPage);
-        $borrowRequests = BorrowRequest::with('user', 'item')
+        $filteredBorrowRequests = BorrowRequest::with('user', 'item')
             ->where('status', 'pending')
-            ->latest('created_at')
-            ->paginate($requestsPerPage, ['*'], 'requests_page');
-        $borrowedItems = BorrowHistory::with('user', 'item')
+            ->get()
+            ->filter(function ($borrowRequest) {
+                return $borrowRequest->getItem() && $borrowRequest->getItemGroup() === auth()->user()->user_group;
+            })
+            ->sortBy('created_at')
+            ->values();
+
+        $requestsPage = LengthAwarePaginator::resolveCurrentPage('requests_page');
+        $borrowRequests = new LengthAwarePaginator(
+            $filteredBorrowRequests->forPage($requestsPage, $requestsPerPage),
+            $filteredBorrowRequests->count(),
+            $requestsPerPage,
+            $requestsPage,
+            [
+                'path' => url()->current(),
+                'query' => $request->query(),
+                'pageName' => 'requests_page',
+            ]
+        );
+
+        $filteredBorrowedItems = BorrowHistory::with('user', 'item')
             ->whereNull('returned_at')
-            ->latest('borrowed_at')
-            ->paginate($borrowedPerPage, ['*'], 'borrowed_page');
+            ->get()
+            ->filter(function ($borrowHistory) {
+                return $borrowHistory->getItem() && $borrowHistory->getItemGroup() === auth()->user()->user_group;
+            })
+            ->sortBy('borrowed_at')
+            ->values();
+
+        $borrowedPage = LengthAwarePaginator::resolveCurrentPage('borrowed_page');
+        $borrowedItems = new LengthAwarePaginator(
+            $filteredBorrowedItems->forPage($borrowedPage, $borrowedPerPage),
+            $filteredBorrowedItems->count(),
+            $borrowedPerPage,
+            $borrowedPage,
+            [
+                'path' => url()->current(),
+                'query' => $request->query(),
+                'pageName' => 'borrowed_page',
+            ]
+        );
 
         return view('admin.adminView', compact('items', 'perPage', 'borrowRequests', 'borrowedItems', 'borrowedPerPage', 'requestsPerPage', 'searchQuery', 'locationFilter', 'venueFilter', 'locations', 'venues'));
     }
@@ -68,10 +133,16 @@ class AdminController extends Controller
             return redirect()->route('manager')->with('error', 'This request has already been processed.');
         }
 
-        $item = $borrowRequest->item->fresh();
+        // Check if the manager can approve requests for this item group
+        if ($borrowRequest->getItemGroup() !== auth()->user()->user_group) {
+            return redirect()->route('manager')->with('error', 'You can only approve requests for items in your own group.');
+        }
+
+        $item = $borrowRequest->getItem();
         $requestedQuantity = $borrowRequest->quantity;
-        
-        if ($item->physical_stock <= 0 || $item->availability !== 'available' || $item->physical_stock < $requestedQuantity) {
+        $availability = strtolower(trim((string) ($item->availability ?? '')));
+
+        if ($item->physical_stock <= 0 || ($availability !== '' && $availability !== 'available') || $item->physical_stock < $requestedQuantity) {
             // Create a borrow history record with rejected status
             BorrowHistory::create([
                 'user_id' => $borrowRequest->user_id,
@@ -109,7 +180,11 @@ class AdminController extends Controller
             return redirect()->route('manager')->with('error', 'This return request has already been processed.');
         }
 
-        $item = $borrowHistory->item;
+        if ($borrowHistory->getItemGroup() !== auth()->user()->user_group) {
+            return redirect()->route('manager')->with('error', 'You can only approve returns for items in your own group.');
+        }
+
+        $item = $borrowHistory->getItem();
         $item->physical_stock += $borrowHistory->count;
         $item->availability = $item->physical_stock > 0 ? 'available' : 'out_of_stock';
         $item->save();
@@ -125,6 +200,10 @@ class AdminController extends Controller
     {
         if ($borrowHistory->return_status !== 'pending') {
             return redirect()->route('manager')->with('error', 'This return request has already been processed.');
+        }
+
+        if ($borrowHistory->getItemGroup() !== auth()->user()->user_group) {
+            return redirect()->route('manager')->with('error', 'You can only reject returns for items in your own group.');
         }
 
         $request->validate([
@@ -143,6 +222,11 @@ class AdminController extends Controller
     {
         if ($borrowRequest->status !== 'pending') {
             return redirect()->route('manager')->with('error', 'This request has already been processed.');
+        }
+
+        // Check if the manager can reject requests for this item group
+        if ($borrowRequest->getItemGroup() !== auth()->user()->user_group) {
+            return redirect()->route('manager')->with('error', 'You can only reject requests for items in your own group.');
         }
 
         $validated = $request->validate([
@@ -164,29 +248,41 @@ class AdminController extends Controller
         $locationFilter = $request->query('location');
         $venueFilter = $request->query('venue');
 
-        $locations = Item::whereNotNull('location')
+        $modelClass = $this->getManagerItemModel();
+        $tableName = (new $modelClass())->getTable();
+        $hasVenueColumn = Schema::hasColumn($tableName, 'venue');
+
+        $locations = $modelClass::whereNotNull('location')
             ->where('location', '!=', '')
             ->distinct()
             ->orderBy('location')
             ->pluck('location');
-        $venues = Item::whereNotNull('venue')
-            ->where('venue', '!=', '')
-            ->distinct()
-            ->orderBy('venue')
-            ->pluck('venue');
+        $venues = collect();
+        if ($hasVenueColumn) {
+            $venues = $modelClass::whereNotNull('venue')
+                ->where('venue', '!=', '')
+                ->distinct()
+                ->orderBy('venue')
+                ->pluck('venue');
+        }
 
-        $itemsQuery = Item::orderBy('created_at', 'desc');
+        $itemsQuery = $modelClass::orderBy('created_at', 'asc');
         if ($locationFilter) {
             $itemsQuery->where('location', $locationFilter);
         }
-        if ($venueFilter) {
+        if ($venueFilter && $hasVenueColumn) {
             $itemsQuery->where('venue', $venueFilter);
         }
         if ($searchQuery) {
-            $itemsQuery->where(function ($query) use ($searchQuery) {
-                $query->where('item_description', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+            $itemsQuery->where(function ($query) use ($searchQuery, $modelClass) {
+                if ($modelClass === MechanicalItem::class) {
+                    $query->where('description', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('category_name', 'like', '%' . $searchQuery . '%');
+                } else {
+                    $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
+                        ->orWhere('supplier', 'like', '%' . $searchQuery . '%');
+                }
             });
         }
         $items = $itemsQuery->paginate($perPage);
@@ -201,24 +297,40 @@ class AdminController extends Controller
         $venueFilter = $request->query('venue');
         $perPage = $request->query('per_page', 5);
 
-        $itemsQuery = Item::orderBy('created_at', 'desc');
+        $modelClass = $this->getManagerItemModel();
+        $tableName = (new $modelClass())->getTable();
+        $hasVenueColumn = Schema::hasColumn($tableName, 'venue');
+
+        $itemsQuery = $modelClass::orderBy('created_at', 'asc');
         if ($locationFilter) {
             $itemsQuery->where('location', $locationFilter);
         }
-        if ($venueFilter) {
+        if ($venueFilter && $hasVenueColumn) {
             $itemsQuery->where('venue', $venueFilter);
         }
         
         if ($search) {
-            $itemsQuery->where(function ($query) use ($search) {
-                $query->where('item_description', 'like', '%' . $search . '%')
-                    ->orWhere('category_name', 'like', '%' . $search . '%')
-                    ->orWhere('supplier', 'like', '%' . $search . '%');
+            $itemsQuery->where(function ($query) use ($search, $modelClass) {
+                if ($modelClass === MechanicalItem::class) {
+                    $query->where('description', 'like', '%' . $search . '%')
+                        ->orWhere('category_name', 'like', '%' . $search . '%');
+                } else {
+                    $query->where('item_description', 'like', '%' . $search . '%')
+                        ->orWhere('category_name', 'like', '%' . $search . '%')
+                        ->orWhere('supplier', 'like', '%' . $search . '%');
+                }
             });
         }
 
         $total = $itemsQuery->count();
-        $items = $itemsQuery->limit($perPage)->get();
+        $items = $itemsQuery->limit($perPage)->get()->map(function ($item) {
+            return array_merge($item->toArray(), [
+                'sr_number' => $item->sr_number,
+                'item_description' => $item->item_description,
+                'physical_stock' => $item->physical_stock,
+                'quantity_in_hand_current' => $item->quantity_in_hand_current,
+            ]);
+        });
 
         return response()->json([
             'items' => $items,

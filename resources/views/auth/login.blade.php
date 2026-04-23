@@ -41,9 +41,14 @@
                     <!-- Password -->
                     <div>
                         <label class="block text-sm text-gray-300 mb-1">Password</label>
-                        <input id="password" type="password" name="password" required
-                               class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                               placeholder="••••••••">
+                        <div class="flex items-center gap-2">
+                            <input id="password" type="password" name="password" required
+                                   class="flex-1 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+                                   placeholder="••••••••">
+                            <button type="button" onclick="togglePasswordVisibility('password')" class="px-4 py-3 text-blue-300 hover:text-blue-200 focus:outline-none transition font-semibold text-sm whitespace-nowrap bg-white">
+                                <span id="toggle-password">Show</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Remember + Forgot -->
@@ -84,4 +89,19 @@
             </div>
         </div>
     </div>
+
+    <script>
+        function togglePasswordVisibility(fieldId) {
+            const input = document.getElementById(fieldId);
+            const toggleButton = document.getElementById('toggle-' + fieldId);
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                toggleButton.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                toggleButton.textContent = 'Show';
+            }
+        }
+    </script>
 </x-layout>

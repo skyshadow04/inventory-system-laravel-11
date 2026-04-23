@@ -1,8 +1,23 @@
 <x-layout>
     <div class="py-10 px-4 sm:px-6 lg:px-8">
         <div class="max-w-6xl mx-auto">
-            <div class="mb-6 flex items-center justify-between">
-                <h1 class="text-2xl font-bold text-slate-800">Available Electrical Devices / Equipments</h1>
+            <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Available Electrical Devices / Equipments</h1>
+                    @php
+                        $userGroup = auth()->user()->user_group ?? 'APP';
+                        $groupDisplayNames = [
+                            'APP' => 'APP',
+                            'Engineering' => 'Engineering (Engg/INS)',
+                            'Mechanical' => 'Mechanical (ENGG/MEC)',
+                            'Operations' => 'Operations (OPTNS)',
+                        ];
+                    @endphp
+                    <p class="text-sm text-slate-600">Viewing items for: <span class="font-semibold">{{ $groupDisplayNames[$userGroup] ?? $userGroup }}</span></p>
+                </div>
+                <div>
+                    <a href="{{ route('users.all-items') }}" class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">View All Items</a>
+                </div>
             </div>
 
             @if (session('success'))
@@ -100,8 +115,12 @@
                                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Sr#</th>
                                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Category</th>
                                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Description</th>
-                                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Supplier</th>
-                                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Venue</th>
+                                            @if(auth()->user()->user_group !== 'Mechanical')
+                                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Supplier</th>
+                                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Venue</th>
+                                            @else
+                                                <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Remarks</th>
+                                            @endif
                                             <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Quantity</th>
                                             <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Availability</th>
                                             <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
@@ -113,17 +132,20 @@
                                                 <td class="px-4 py-3 text-sm text-gray-800">{{ $item->sr_number }}</td>
                                                 <td class="px-4 py-3 text-sm text-gray-800">{{ $item->category_name }}</td>
                                                 <td class="px-4 py-3 text-sm text-gray-800">{{ $item->item_description }}</td>
-                                                <td class="px-4 py-3 text-sm text-gray-800">{{ $item->supplier ?? '–' }}</td>
-                                                <td class="px-4 py-3 text-sm text-gray-800">{{ $item->venue ?? '–' }}</td>
+                                                @if(auth()->user()->user_group !== 'Mechanical')
+                                                    <td class="px-4 py-3 text-sm text-gray-800">{{ $item->supplier ?? '–' }}</td>
+                                                    <td class="px-4 py-3 text-sm text-gray-800">{{ $item->venue ?? '–' }}</td>
+                                                @else
+                                                    <td class="px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title="{{ $item->remarks ?? '–' }}">{{ $item->remarks ?? '–' }}</td>
+                                                @endif
                                                 <td class="px-4 py-3 text-center text-sm text-gray-800">{{ $item->physical_stock }}</td>
                                                 <td class="px-4 py-3 text-center text-sm">
                                                     @php
-                                                        $isAvailable = ($item->physical_stock ?? 0) > 0 && $item->availability === 'available';
+                                                        $isAvailable = ($item->physical_stock ?? 0) > 0;
                                                     @endphp
                                                     <span class="px-2 py-1 text-xs font-medium rounded-full 
-                                                        {{ $isAvailable ? 'bg-green-100 text-green-800' : 
-                                                           ($item->availability == 'unavailable' || $item->availability == 'out_of_stock' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') }}">
-                                                        {{ $isAvailable ? 'Available' : ucfirst(str_replace('_', ' ', $item->availability)) }}
+                                                        {{ $isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                        {{ $isAvailable ? 'Available' : 'Out of Stock' }}
                                                     </span>
                                                 </td>
                                                 <td class="px-4 py-3 text-center">
@@ -136,10 +158,10 @@
                                                         <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-yellow-100 text-yellow-800">Pending Request</span>
                                                     @elseif($hasApprovedRequest)
                                                         <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-blue-100 text-blue-800">Approved - Waiting Release</span>
-                                                    @elseif(($item->physical_stock ?? 0) > 0 && $item->availability === 'available')
-                                                        <button type="button" onclick="showBorrowModal({{ $item->sr_number }}, '{{ $item->item_description }}', {{ $item->quantity_in_hand_current }})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>
+                                                    @elseif(($item->physical_stock ?? 0) > 0)
+                                                        <button type="button" onclick="showBorrowModal('{{ $item->sr_number }}', {{ json_encode($item->item_description) }}, {{ $item->physical_stock }})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>
                                                     @else
-                                                        <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Unavailable</span>
+                                                        <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Out of Stock</span>
                                                     @endif
                                                 </td>
                                             </tr>
@@ -296,8 +318,8 @@
     </div>
 
     <!-- Borrow Modal -->
-    <div id="borrowModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+    <div id="borrowModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeBorrowModal()">
+        <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4" onclick="event.stopPropagation()">
             <h2 class="text-lg font-bold text-slate-800 mb-4">Borrow Item</h2>
             <form id="borrowForm" method="POST" action="">
                 @csrf
@@ -322,6 +344,7 @@
 
     <script>
         const USER_SCROLL_KEY = 'userScrollPos';
+        const USER_GROUP = '{{ $userGroup }}';
 
         // Real-time search functionality
         const searchInput = document.getElementById('searchInput');
@@ -359,14 +382,17 @@
             if (!tbody) return;
 
             if (items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">No items found</td></tr>';
+                const colSpan = USER_GROUP === 'Mechanical' ? 7 : 8;
+                tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-gray-600">No items found</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = items.map(item => {
-                const hasPending = pendingIds.includes(item.sr_number);
-                const hasApproved = approvedIds.includes(item.sr_number);
-                const isAvailable = (item.physical_stock ?? 0) > 0 && item.availability === 'available';
+                const hasPending = pendingIds.includes(item.sr_number || item.sr_no);
+                const hasApproved = approvedIds.includes(item.sr_number || item.sr_no);
+                const availabilityLower = (item.availability || '').toLowerCase();
+                const isAvailable = (item.physical_stock ?? 0) > 0;
+                const itemId = item.sr_number || item.sr_no;
                 
                 let actionHtml = '';
                 if (hasPending) {
@@ -374,22 +400,28 @@
                 } else if (hasApproved) {
                     actionHtml = '<span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-blue-100 text-blue-800">Approved - Waiting Release</span>';
                 } else if (isAvailable) {
-                    actionHtml = `<button type="button" onclick="showBorrowModal(${item.sr_number}, '${item.item_description.replace(/'/g, "\\'")}', ${item.quantity_in_hand_current})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>`;
+                    actionHtml = `<button type="button" onclick="showBorrowModal('${itemId}', ${JSON.stringify(item.item_description)}, ${item.physical_stock})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>`;
                 } else {
-                    actionHtml = '<span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Unavailable</span>';
+                    actionHtml = '<span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Out of Stock</span>';
                 }
 
-                const availabilityClass = isAvailable ? 'bg-green-100 text-green-800' : 
-                    (item.availability === 'unavailable' || item.availability === 'out_of_stock' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800');
-                const availabilityText = isAvailable ? 'Available' : item.availability.replace(/_/g, ' ').charAt(0).toUpperCase() + item.availability.replace(/_/g, ' ').slice(1);
+                const availabilityClass = isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                const availabilityText = isAvailable ? 'Available' : 'Out of Stock';
+
+                let extraColumnHtml = '';
+                if (USER_GROUP === 'Mechanical') {
+                    extraColumnHtml = `<td class="px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title="${item.remarks || '–'}">${item.remarks || '–'}</td>`;
+                } else {
+                    extraColumnHtml = `<td class="px-4 py-3 text-sm text-gray-800">${item.supplier || '–'}</td>
+                        <td class="px-4 py-3 text-sm text-gray-800">${item.venue || '–'}</td>`;
+                }
 
                 return `
                     <tr>
-                        <td class="px-4 py-3 text-sm text-gray-800">${item.sr_number}</td>
+                        <td class="px-4 py-3 text-sm text-gray-800">${itemId}</td>
                         <td class="px-4 py-3 text-sm text-gray-800">${item.category_name}</td>
                         <td class="px-4 py-3 text-sm text-gray-800">${item.item_description}</td>
-                        <td class="px-4 py-3 text-sm text-gray-800">${item.supplier || '–'}</td>
-                        <td class="px-4 py-3 text-sm text-gray-800">${item.venue || '–'}</td>
+                        ${extraColumnHtml}
                         <td class="px-4 py-3 text-center text-sm text-gray-800">${item.physical_stock}</td>
                         <td class="px-4 py-3 text-center text-sm">
                             <span class="px-2 py-1 text-xs font-medium rounded-full ${availabilityClass}">
@@ -419,7 +451,7 @@
             const maxQuantitySpan = document.getElementById('maxQuantityDisplay');
             const itemNameSpan = document.getElementById('borrowItemName');
 
-            form.action = `/users/item/${itemId}/borrow`;
+            form.action = `/users/item/${encodeURIComponent(itemId)}/borrow`;
             itemNameSpan.textContent = itemName;
             quantityInput.max = maxQuantity;
             quantityInput.value = 1;
@@ -431,6 +463,19 @@
         function closeBorrowModal() {
             document.getElementById('borrowModal').classList.add('hidden');
         }
+
+        // Handle borrow form submission
+        document.getElementById('borrowForm').addEventListener('submit', function(e) {
+            // Close modal immediately when form is submitted
+            closeBorrowModal();
+        });
+
+        // Handle escape key to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !document.getElementById('borrowModal').classList.contains('hidden')) {
+                closeBorrowModal();
+            }
+        });
 
         // Accordion functionality
         document.addEventListener('DOMContentLoaded', function() {

@@ -95,7 +95,16 @@
                                                 </button>
                                             </form>
                                         @else
-                                            <!-- Verified User - Show Deactivate Button -->
+                                            <!-- Verified User - Show Edit and Deactivate Buttons -->
+                                            <button type="button"
+                                                class="open-edit-modal inline-block px-3 py-1 bg-blue-500 text-white text-xs font-medium rounded hover:bg-blue-600 transition"
+                                                data-user-id="{{ $user->id }}"
+                                                data-user-name="{{ $user->name }}"
+                                                data-user-email="{{ $user->email }}"
+                                                data-user-group="{{ $user->user_group ?? 'General' }}"
+                                                data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : 'general')) }}">
+                                                Edit
+                                            </button>
                                             <form method="POST" action="{{ route('superadmin.user.deactivate', $user) }}" class="inline-block">
                                                 @csrf
                                                 <button type="submit" class="px-3 py-1 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 transition" onclick="return confirm('Deactivate this user?')">
@@ -124,6 +133,77 @@
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Edit User Modal -->
+            <div id="edit-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 px-4 py-6">
+                <div class="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/5">
+                    <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                        <div>
+                            <h3 class="text-xl font-semibold text-slate-900">Edit User Account</h3>
+                            <p class="text-sm text-slate-500">Update user details and role assignments.</p>
+                        </div>
+                        <button type="button" id="close-edit-modal" class="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200">
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    </div>
+                    <form id="edit-user-form" method="POST" action="" class="space-y-6 px-6 py-6">
+                        @csrf
+                        @method('PUT')
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label for="edit-user-name" class="block text-sm font-medium text-slate-700">Name</label>
+                                <input type="text" id="edit-user-name" name="name" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" required>
+                            </div>
+                            <div>
+                                <label for="edit-user-email" class="block text-sm font-medium text-slate-700">Email</label>
+                                <input type="email" id="edit-user-email" name="email" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" required>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="edit-user-group" class="block text-sm font-medium text-slate-700">User Group</label>
+                                <select id="edit-user-group" name="user_group" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500">
+                                    <option value="General">General</option>
+                                    <option value="Engineering">Engineering</option>
+                                    <option value="APP">APP</option>
+                                    <option value="Mechanical">Mechanical</option>
+                                    <option value="Electrical">Electrical</option>
+                                    <option value="Operations">Operations</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <p class="text-sm font-medium text-slate-700">Assign Role</p>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="general" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500" checked>
+                                    <span>General User</span>
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="manager" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                    <span>Manager</span>
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="resource_officer" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                    <span>Resource Officer</span>
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="superadmin" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                    <span>Super Admin</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-3 justify-end border-t border-slate-200 pt-4">
+                            <button type="button" id="cancel-edit-user" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                Cancel
+                            </button>
+                            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -203,6 +283,56 @@
 
             <script>
                 document.addEventListener('DOMContentLoaded', function () {
+                    // Edit Modal Functionality
+                    const editModal = document.getElementById('edit-user-modal');
+                    const editForm = document.getElementById('edit-user-form');
+                    const editNameField = document.getElementById('edit-user-name');
+                    const editEmailField = document.getElementById('edit-user-email');
+                    const editGroupSelect = document.getElementById('edit-user-group');
+                    const editRoleRadios = Array.from(editForm.querySelectorAll('input[name="role"]'));
+                    const editCloseButtons = [
+                        document.getElementById('close-edit-modal'),
+                        document.getElementById('cancel-edit-user'),
+                    ];
+                    const editActionRouteBase = '{{ url('superadmin/users') }}';
+
+                    function openEditModal(user) {
+                        editForm.action = `${editActionRouteBase}/${user.id}`;
+                        editNameField.value = user.name;
+                        editEmailField.value = user.email;
+                        editGroupSelect.value = user.group ?? 'General';
+                        editRoleRadios.forEach(radio => {
+                            radio.checked = radio.value === (user.role || 'general');
+                        });
+                        editModal.style.display = 'flex';
+                    }
+
+                    function closeEditModal() {
+                        editModal.style.display = 'none';
+                    }
+
+                    document.querySelectorAll('.open-edit-modal').forEach(button => {
+                        button.addEventListener('click', () => {
+                            openEditModal({
+                                id: button.dataset.userId,
+                                name: button.dataset.userName,
+                                email: button.dataset.userEmail,
+                                group: button.dataset.userGroup,
+                                role: button.dataset.userRole,
+                            });
+                        });
+                    });
+
+                    editCloseButtons.forEach(button => {
+                        button.addEventListener('click', closeEditModal);
+                    });
+
+                    editModal.addEventListener('click', (event) => {
+                        if (event.target === editModal) {
+                            closeEditModal();
+                        }
+                    });
+
                     const modal = document.getElementById('approve-user-modal');
                     const closeModalButtons = [
                         document.getElementById('close-approve-modal'),
@@ -214,10 +344,10 @@
                     const registeredField = document.getElementById('approve-user-registered');
                     const groupSelect = document.getElementById('approve-user-group');
                     const roleRadios = Array.from(form.querySelectorAll('input[name="role"]'));
-                    const actionRouteBase = '{{ url('superadmin/users') }}';
+                    const approveActionRouteBase = '{{ url('superadmin/users') }}';
 
                     function openModal(user) {
-                        form.action = `${actionRouteBase}/${user.id}/approve`;
+                        form.action = `${approveActionRouteBase}/${user.id}/approve`;
                         nameField.textContent = user.name;
                         emailField.textContent = user.email;
                         registeredField.textContent = user.registered;
@@ -225,11 +355,11 @@
                         roleRadios.forEach(radio => {
                             radio.checked = radio.value === (user.role || 'general');
                         });
-                        modal.classList.remove('hidden');
+                        modal.style.display = 'flex';
                     }
 
                     function closeModal() {
-                        modal.classList.add('hidden');
+                        modal.style.display = 'none';
                     }
 
                     document.querySelectorAll('.open-approve-modal').forEach(button => {

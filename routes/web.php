@@ -27,6 +27,13 @@ Route::middleware('auth')->group(function () {
     Route::post('sessions/revoke-all-others', [App\Http\Controllers\SessionController::class, 'revokeAllOthers'])->name('sessions.revoke-all-others');
 });
 
+// Profile routes (authenticated users only)
+Route::middleware('auth')->group(function () {
+    Route::get('profile', [App\Http\Controllers\ProfileController::class, 'show'])->name('profile.show');
+    Route::put('profile', [App\Http\Controllers\ProfileController::class, 'update'])->name('profile.update');
+    Route::post('profile/change-password', [App\Http\Controllers\ProfileController::class, 'changePassword'])->name('profile.change-password');
+});
+
 // format for calling the controller method in the route
 // users -> folder
 // user -> filename
@@ -34,9 +41,11 @@ Route::middleware('auth')->group(function () {
 
 // User routes
 Route::middleware(['auth', 'user'])->group(function () {
-    Route::get('users', [App\Http\Controllers\UserController::class, 'index']);
+    Route::get('users', [App\Http\Controllers\UserController::class, 'index'])->name('users');
+    Route::get('users/all-items', [App\Http\Controllers\UserController::class, 'allItems'])->name('users.all-items');
     Route::get('users/search-items', [App\Http\Controllers\UserController::class, 'searchItems'])->name('users.search-items');
-    Route::post('users/item/{item}/borrow', [App\Http\Controllers\UserController::class, 'borrow'])->name('users.item.borrow');
+    Route::post('users/item/{itemId}/borrow', [App\Http\Controllers\UserController::class, 'borrow'])->name('users.item.borrow');
+    Route::post('users/all-items/item/{itemId}/borrow', [App\Http\Controllers\UserController::class, 'borrowAllItems'])->name('users.all-items.item.borrow');
     Route::post('users/borrow-history/{borrowHistory}/return', [App\Http\Controllers\UserController::class, 'returnItem'])->name('users.borrow-history.return');
     Route::post('users/borrow-request/{borrowRequest}/cancel', [App\Http\Controllers\UserController::class, 'cancelBorrowRequest'])->name('users.borrow-request.cancel');
     Route::get('users/check-changes', [App\Http\Controllers\ApiController::class, 'checkUserChanges'])->name('users.check-changes');
@@ -92,4 +101,5 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     Route::post('superadmin/users/{user}/reject', [App\Http\Controllers\SuperAdminController::class, 'rejectUser'])->name('superadmin.user.reject');
     Route::post('superadmin/users/{user}/deactivate', [App\Http\Controllers\SuperAdminController::class, 'deactivateUser'])->name('superadmin.user.deactivate');
     Route::post('superadmin/users/{user}/reactivate', [App\Http\Controllers\SuperAdminController::class, 'reactivateUser'])->name('superadmin.user.reactivate');
+    Route::put('superadmin/users/{user}', [App\Http\Controllers\SuperAdminController::class, 'updateUser'])->name('superadmin.user.update');
 });

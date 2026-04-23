@@ -30,4 +30,15 @@ class OperationItem extends Model
         'difference',
         'remarks',
     ];
+
+    // Accessors to map database columns to expected attribute names
+    public function getSrNumberAttribute()
+    {
+        return $this->sr_no;
+    }
+
+    public function getQuantityInHandCurrentAttribute()
+    {
+        return $this->physical_stock;
+    }
 }

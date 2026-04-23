@@ -15,6 +15,16 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap" rel="stylesheet" />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        <?php 
+        // <link href="https://inventory-system-app.infinityfreeapp.com/public/build/assets/app-mUIWfBr5.css" rel="stylesheet">
+		// <script src="https://inventory-system-app.infinityfreeapp.com/public/build/assets/app-BbzB21r_.js" defer></script>
+        // Production assets from Vite build
+
+        // Dev assets from Vite dev server
+
+        //@vite(['resources/css/app.css', 'resources/js/app.js'])
+        
+        ?>
     </head>
     <body class="font-sans antialiased bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
         @php
@@ -54,6 +64,7 @@
                             </p>
                         </div>
                         @if ($sessionActive)
+                            <a href="{{ route('profile.show') }}" class="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium">Profile</a>
                             <a href="{{ route('sessions.index') }}" class="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium">Sessions</a>
                             @if (auth()->user()->is_superadmin)
                                 <a href="{{ route('superadmin.dashboard') }}" class="px-3 py-2 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 transition font-medium">Super Admin</a>
