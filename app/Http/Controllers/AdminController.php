@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\BorrowHistory;
 use App\Models\BorrowRequest;
+use App\Models\ElectricalItem;
 use App\Models\EngineeringItem;
+use App\Models\InstrumentItem;
 use App\Models\Item;
 use App\Models\MechanicalItem;
 use App\Models\OperationItem;
@@ -14,15 +16,60 @@ use Illuminate\Support\Facades\Schema;
 
 class AdminController extends Controller
 {
+    /**
+     * Determine which groups a manager can manage
+     */
+    private function getManagedGroups(): array
+    {
+        $userGroup = auth()->user()->user_group ?? 'APP';
+
+        return match ($userGroup) {
+            'Engineering', 'Instrument' => ['Engineering', 'Mechanical', 'Electrical', 'Instrument'],
+            default => [$userGroup],
+        };
+    }
+
+    /**
+     * Check if the manager can manage a specific item group
+     */
+    private function canManageGroup(string $itemGroup): bool
+    {
+        return in_array($itemGroup, $this->getManagedGroups());
+    }
+
+    /**
+     * Get model classes for all managed groups
+     */
+    private function getManagedItemModels(): array
+    {
+        $managedGroups = $this->getManagedGroups();
+        $models = [];
+
+        foreach ($managedGroups as $group) {
+            $models[$group] = match ($group) {
+                'APP' => Item::class,
+                'Engineering' => EngineeringItem::class,
+                'Mechanical' => MechanicalItem::class,
+                'Operations' => OperationItem::class,
+                'Electrical' => ElectricalItem::class,
+                'Instrument' => InstrumentItem::class,
+                default => Item::class,
+            };
+        }
+
+        return $models;
+    }
+
     private function getManagerItemModel(): string
     {
         $userGroup = auth()->user()->user_group ?? 'APP';
 
         return match ($userGroup) {
             'APP' => Item::class,
-            'Engineering' => EngineeringItem::class,
+            'Engineering', 'Instrument' => EngineeringItem::class,
             'Mechanical' => MechanicalItem::class,
             'Operations' => OperationItem::class,
+            'Electrical' => \App\Models\ElectricalItem::class,
             default => Item::class,
         };
     }
@@ -84,7 +131,7 @@ class AdminController extends Controller
             ->where('status', 'pending')
             ->get()
             ->filter(function ($borrowRequest) {
-                return $borrowRequest->getItem() && $borrowRequest->getItemGroup() === auth()->user()->user_group;
+                return $borrowRequest->getItem() && $this->canManageGroup($borrowRequest->getItemGroup());
             })
             ->sortBy('created_at')
             ->values();
@@ -106,7 +153,7 @@ class AdminController extends Controller
             ->whereNull('returned_at')
             ->get()
             ->filter(function ($borrowHistory) {
-                return $borrowHistory->getItem() && $borrowHistory->getItemGroup() === auth()->user()->user_group;
+                return $borrowHistory->getItem() && $this->canManageGroup($borrowHistory->getItemGroup());
             })
             ->sortBy('borrowed_at')
             ->values();
@@ -134,8 +181,8 @@ class AdminController extends Controller
         }
 
         // Check if the manager can approve requests for this item group
-        if ($borrowRequest->getItemGroup() !== auth()->user()->user_group) {
-            return redirect()->route('manager')->with('error', 'You can only approve requests for items in your own group.');
+        if (!$this->canManageGroup($borrowRequest->getItemGroup())) {
+            return redirect()->route('manager')->with('error', 'You can only approve requests for items in your managed groups.');
         }
 
         $item = $borrowRequest->getItem();
@@ -180,8 +227,8 @@ class AdminController extends Controller
             return redirect()->route('manager')->with('error', 'This return request has already been processed.');
         }
 
-        if ($borrowHistory->getItemGroup() !== auth()->user()->user_group) {
-            return redirect()->route('manager')->with('error', 'You can only approve returns for items in your own group.');
+        if (!$this->canManageGroup($borrowHistory->getItemGroup())) {
+            return redirect()->route('manager')->with('error', 'You can only approve returns for items in your managed groups.');
         }
 
         $item = $borrowHistory->getItem();
@@ -202,8 +249,8 @@ class AdminController extends Controller
             return redirect()->route('manager')->with('error', 'This return request has already been processed.');
         }
 
-        if ($borrowHistory->getItemGroup() !== auth()->user()->user_group) {
-            return redirect()->route('manager')->with('error', 'You can only reject returns for items in your own group.');
+        if (!$this->canManageGroup($borrowHistory->getItemGroup())) {
+            return redirect()->route('manager')->with('error', 'You can only reject returns for items in your managed groups.');
         }
 
         $request->validate([
@@ -225,8 +272,8 @@ class AdminController extends Controller
         }
 
         // Check if the manager can reject requests for this item group
-        if ($borrowRequest->getItemGroup() !== auth()->user()->user_group) {
-            return redirect()->route('manager')->with('error', 'You can only reject requests for items in your own group.');
+        if (!$this->canManageGroup($borrowRequest->getItemGroup())) {
+            return redirect()->route('manager')->with('error', 'You can only reject requests for items in your managed groups.');
         }
 
         $validated = $request->validate([

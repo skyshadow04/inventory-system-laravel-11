@@ -117,6 +117,15 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-  
+        User::updateOrCreate(
+            ['email' => 'store.watcher@example.com'],
+            [
+                'name' => 'Store Watcher Tester',
+                'password' => bcrypt('password'),
+                'is_store_watcher' => true,
+                'is_verified' => true,
+                'user_group' => 'Store Watcher',
+            ]
+        );
     }
 }

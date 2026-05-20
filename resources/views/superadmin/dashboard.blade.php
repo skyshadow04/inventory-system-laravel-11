@@ -113,7 +113,7 @@
                                                     data-user-email="{{ $user->email }}"
                                                     data-user-registered="{{ $user->created_at->format('M d, Y H:i') }}"
                                                     data-user-group="{{ $user->user_group ?? 'General' }}"
-                                                    data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : 'general')) }}">
+                                                    data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : ($user->is_store_watcher ? 'store_watcher' : 'general'))) }}">
                                                     Approve
                                                 </button>
                                                 <form method="POST" action="{{ route('superadmin.user.reject', $user) }}" class="inline">
@@ -181,6 +181,8 @@
                                         <option value="Mechanical">Mechanical</option>
                                         <option value="Electrical">Electrical</option>
                                         <option value="Operations">Operations</option>
+                                        <option value="Instrument">Instrument</option>
+                                        <option value="Store Watcher">Store Watcher</option>
                                     </select>
                                 </div>
                             </div>
@@ -199,6 +201,10 @@
                                     <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                         <input type="radio" name="role" value="resource_officer" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
                                         <span>Resource Officer</span>
+                                    </label>
+                                    <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                        <input type="radio" name="role" value="store_watcher" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                        <span>Store Watcher</span>
                                     </label>
                                     <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                         <input type="radio" name="role" value="superadmin" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">

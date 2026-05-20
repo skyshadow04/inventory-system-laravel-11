@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\BorrowHistory;
 use App\Models\BorrowRequest;
+use App\Models\ElectricalItem;
 use App\Models\EngineeringItem;
+use App\Models\InstrumentItem;
 use App\Models\Item;
 use App\Models\MechanicalItem;
 use App\Models\OperationItem;
@@ -35,11 +37,15 @@ class ResourceOfficerController extends Controller
         $locationsQuery->union(EngineeringItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
         $locationsQuery->union(OperationItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
         $locationsQuery->union(MechanicalItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
+        $locationsQuery->union(ElectricalItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
+        $locationsQuery->union(InstrumentItem::whereNotNull('location')->where('location', '!=', '')->select('location'));
         $locations = $locationsQuery->distinct()->orderBy('location')->pluck('location');
 
         $venuesQuery = Item::whereNotNull('venue')->where('venue', '!=', '');
         $venuesQuery->union(EngineeringItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
         $venuesQuery->union(OperationItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
+        $venuesQuery->union(ElectricalItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
+        $venuesQuery->union(InstrumentItem::whereNotNull('venue')->where('venue', '!=', '')->select('venue'));
         $venues = $venuesQuery->distinct()->orderBy('venue')->pluck('venue');
 
         // Query all item types with filters
@@ -153,6 +159,36 @@ class ResourceOfficerController extends Controller
         });
         $itemsCollections[] = $mechItems;
 
+        // Electrical items
+        $elecItemsQuery = ElectricalItem::orderBy('created_at', 'desc');
+        if ($locationFilter) {
+            $elecItemsQuery->where('location', $locationFilter);
+        }
+        if ($venueFilter) {
+            $elecItemsQuery->where('venue', $venueFilter);
+        }
+        if ($searchQuery) {
+            $elecItemsQuery->where(function ($query) use ($searchQuery) {
+                $query->where('item_description', 'like', '%' . $searchQuery . '%')
+                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%');
+            });
+        }
+        $elecItems = $elecItemsQuery->get()->map(function ($item) {
+            $item->item_type = 'electrical';
+            // Map fields to match main items structure
+            $item->sr_number = $item->sr_number;
+            $item->item_description = $item->item_description;
+            $item->supplier = null; // Not available in electrical items
+            $item->total_in = null;
+            $item->total_out = null;
+            $item->total_return = null;
+            $item->quantity_in_hand_current = $item->quantity_in_hand ?? 0;
+            $item->reconciliation = null;
+            $item->difference = null;
+            return $item;
+        });
+        $itemsCollections[] = $elecItems;
+
         // Combine all collections and sort by created_at
         $allItems = collect();
         foreach ($itemsCollections as $collection) {
@@ -254,6 +290,16 @@ class ResourceOfficerController extends Controller
         }
 
         $requestedQuantity = $borrowRequest->quantity;
+        $item = $borrowRequest->getItem();
+
+        if (!$item) {
+            return redirect()->back()->with('error', 'Associated inventory item could not be found.');
+        }
+
+        $currentStock = (int) $item->physical_stock;
+        $item->physical_stock = max(0, $currentStock - $requestedQuantity);
+        $item->availability = ($item->physical_stock > 0) ? 'available' : 'out_of_stock';
+        $item->save();
 
         BorrowHistory::create([
             'user_id' => $borrowRequest->user_id,
@@ -375,6 +421,19 @@ class ResourceOfficerController extends Controller
     public function importMechanical(Request $request)
     {
         return $this->handleMechanicalImportUpload($request);
+    }
+
+    public function importElectricalForm()
+    {
+        return view('resourceOfficer.import', [
+            'importTitle' => 'Import Electrical Inventory',
+            'importAction' => route('resource-officer.import-electrical.upload'),
+        ]);
+    }
+
+    public function importElectrical(Request $request)
+    {
+        return $this->handleElectricalImportUpload($request);
     }
 
     private function handleImportUpload(Request $request, bool $isEngineering = false, bool $isOperation = false)
@@ -761,11 +820,182 @@ class ResourceOfficerController extends Controller
         return redirect()->route('resource-officer')->with('success', $successMessage);
     }
 
+    private function handleElectricalImportUpload(Request $request)
+    {
+        $validated = $request->validate([
+            'inventory_file' => 'required|file|mimes:xlsx,csv,txt|max:20480',
+        ]);
+
+        $file = $request->file('inventory_file');
+
+        try {
+            $rows = ExcelImporter::readSpreadsheet($file->getPathname());
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['inventory_file' => $exception->getMessage()]);
+        }
+
+        if (empty($rows) || count($rows) < 2) {
+            return back()->withErrors(['inventory_file' => 'The uploaded file must contain a header row and at least one item row.']);
+        }
+
+        $headers = array_map('strtolower', array_map('trim', $rows[0]));
+        $headerMap = [
+            'sr#' => 'sr_number',
+            'category name' => 'category_name',
+            'item description' => 'item_description',
+            'location' => 'location',
+            'venue' => 'venue',
+            'barcode#' => 'barcode',
+            'make' => 'make',
+            'quantity in hand' => 'quantity_in_hand',
+            'physical stock' => 'physical_stock',
+            'remarks' => 'remarks',
+        ];
+
+        $missingRequired = [];
+        if (!in_array('sr#', $headers, true)) {
+            $missingRequired[] = 'Sr#';
+        }
+        if (!in_array('item description', $headers, true)) {
+            $missingRequired[] = 'Item Description';
+        }
+
+        if (!empty($missingRequired)) {
+            return back()->withErrors(['inventory_file' => 'The uploaded file is missing required columns: ' . implode(', ', $missingRequired) . '.']);
+        }
+
+        $importRows = [];
+        $rowSrNumbers = [];
+        $duplicateSrNumbers = [];
+
+        foreach (array_slice($rows, 1) as $rowIndex => $row) {
+            $row = array_map('trim', $row);
+
+            if (empty(array_filter($row, fn($value) => $value !== ''))) {
+                continue;
+            }
+
+            $itemData = [];
+
+            foreach ($headers as $index => $columnName) {
+                if (!isset($headerMap[$columnName])) {
+                    continue;
+                }
+
+                $mappedColumn = $headerMap[$columnName];
+                $value = $row[$index] ?? null;
+
+                if (in_array($mappedColumn, ['quantity_in_hand', 'physical_stock'])) {
+                    $itemData[$mappedColumn] = is_numeric($value) ? (int) $value : 0;
+                } elseif ($mappedColumn === 'sr_number') {
+                    $srValue = trim((string) ($value ?? ''));
+                    if (preg_match('/^elc(\d+)$/i', $srValue, $matches)) {
+                        $itemData[$mappedColumn] = 'ELC' . ltrim($matches[1], '0');
+                    } elseif (is_numeric($srValue)) {
+                        $itemData[$mappedColumn] = 'ELC' . (int) $srValue;
+                    } elseif ($srValue !== '') {
+                        $normalized = strtoupper($srValue);
+                        if (!str_starts_with($normalized, 'ELC')) {
+                            $normalized = 'ELC' . ltrim($normalized, 'ELC');
+                        }
+                        $itemData[$mappedColumn] = $normalized;
+                    } else {
+                        $itemData[$mappedColumn] = null;
+                    }
+                } else {
+                    $itemData[$mappedColumn] = $value;
+                }
+            }
+
+            if (empty($itemData['sr_number']) || empty($itemData['item_description'])) {
+                continue;
+            }
+
+            if (!isset($itemData['quantity_in_hand']) || $itemData['quantity_in_hand'] === null) {
+                $itemData['quantity_in_hand'] = $itemData['physical_stock'] ?? 0;
+            }
+
+            if (!isset($itemData['physical_stock']) || $itemData['physical_stock'] === null) {
+                $itemData['physical_stock'] = $itemData['quantity_in_hand'] ?? 0;
+            }
+
+            // Set default location for electrical items
+            if (!isset($itemData['location']) || empty($itemData['location'])) {
+                $itemData['location'] = 'Electrical';
+            }
+
+            $srNumber = $itemData['sr_number'];
+            if (isset($rowSrNumbers[$srNumber])) {
+                $duplicateSrNumbers[] = $srNumber;
+                continue;
+            }
+
+            $rowSrNumbers[$srNumber] = true;
+            $importRows[] = $itemData;
+        }
+
+        $duplicateSrNumbers = array_unique($duplicateSrNumbers);
+
+        $existingSrNumbers = [];
+        if (!empty($rowSrNumbers)) {
+            $existingSrNumbers = ElectricalItem::whereIn('sr_number', array_keys($rowSrNumbers))
+                ->pluck('sr_number')
+                ->map(fn($num) => (string) $num)
+                ->toArray();
+
+            if (!empty($existingSrNumbers)) {
+                $importRows = array_filter($importRows, fn($itemData) => !in_array((string) $itemData['sr_number'], $existingSrNumbers, true));
+            }
+        }
+
+        $imported = 0;
+        foreach ($importRows as $itemData) {
+            $quantity = $itemData['physical_stock'] ?? 0;
+            $availability = $quantity > 0 ? 'available' : 'out_of_stock';
+
+            ElectricalItem::create(array_merge($itemData, ['availability' => $availability]));
+            $imported++;
+        }
+
+        if ($imported === 0) {
+            if (!empty($existingSrNumbers) && empty($duplicateSrNumbers)) {
+                return back()->with('info', 'No new items were imported because all uploaded SR# values already exist in inventory.');
+            }
+
+            if (!empty($duplicateSrNumbers) && empty($existingSrNumbers)) {
+                return back()->with('info', 'No new items were imported because duplicate SR# values were found in the uploaded file and skipped: ' . implode(', ', $duplicateSrNumbers) . '.');
+            }
+
+            if (!empty($existingSrNumbers) || !empty($duplicateSrNumbers)) {
+                $messages = [];
+                if (!empty($existingSrNumbers)) {
+                    $messages[] = 'already exist in inventory';
+                }
+                if (!empty($duplicateSrNumbers)) {
+                    $messages[] = 'were duplicated in the uploaded file';
+                }
+                return back()->with('info', 'No new items were imported because all uploaded SR# values ' . implode(' and ', $messages) . '.');
+            }
+
+            return back()->withErrors(['inventory_file' => 'No valid inventory rows were found in the uploaded file.']);
+        }
+
+        $successMessage = "$imported item(s) imported successfully!";
+        if (!empty($existingSrNumbers)) {
+            $successMessage .= ' The following SR# values were skipped because they already exist: ' . implode(', ', $existingSrNumbers) . '.';
+        }
+        if (!empty($duplicateSrNumbers)) {
+            $successMessage .= ' The following SR# values were skipped because they were duplicated in the uploaded file: ' . implode(', ', $duplicateSrNumbers) . '.';
+        }
+
+        return redirect()->route('resource-officer')->with('success', $successMessage);
+    }
+
     public function inventory(Request $request)
     {
         $location = $request->input('selected_location');
 
-        if (!$location || !in_array($location, ['APP', 'Engg / INS', 'ENGG / MEC', 'OPTNS'])) {
+        if (!$location || !in_array($location, ['APP', 'Engg / INS', 'Electrical', 'ENGG / MEC', 'OPTNS'])) {
             return redirect()->back()->withErrors(['location' => 'Invalid location selected']);
         }
 
@@ -773,6 +1003,8 @@ class ResourceOfficerController extends Controller
             return $this->saveAppItems($request);
         } elseif ($location === 'Engg / INS') {
             return $this->saveEngineeringItems($request);
+        } elseif ($location === 'Electrical') {
+            return $this->saveElectricalItems($request);
         } elseif ($location === 'ENGG / MEC') {
             return $this->saveMechanicalItems($request);
         } elseif ($location === 'OPTNS') {
@@ -827,6 +1059,20 @@ class ResourceOfficerController extends Controller
         }
         $lastNumber = (int) substr($lastItem->sr_no, 2);
         return 'OP' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function getNextElectricalSrNumber()
+    {
+        $lastItem = ElectricalItem::where('sr_number', 'like', 'ELC%')
+            ->orderByRaw('CAST(SUBSTRING(sr_number, 4) AS UNSIGNED) desc')
+            ->first();
+
+        if (!$lastItem || empty($lastItem->sr_number)) {
+            return 'ELC001';
+        }
+
+        $lastNumber = (int) substr($lastItem->sr_number, 3);
+        return 'ELC' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
     }
 
     private function saveAppItems(Request $request)
@@ -1053,32 +1299,92 @@ class ResourceOfficerController extends Controller
         return redirect()->route('resource-officer')->with('success', 'Operation items added successfully!');
     }
 
+    private function saveElectricalItems(Request $request)
+    {
+        $validated = $request->validate([
+            'item_description_elec' => 'required|array|min:1',
+            'item_description_elec.*' => 'required|string|max:255',
+            'category_name_elec' => 'nullable|array',
+            'category_name_elec.*' => 'nullable|string|max:255',
+            'make_elec' => 'nullable|array',
+            'make_elec.*' => 'nullable|string|max:255',
+            'venue_elec' => 'nullable|array',
+            'venue_elec.*' => 'nullable|string|max:255',
+            'barcode_elec' => 'nullable|array',
+            'barcode_elec.*' => 'nullable|string|max:255',
+            'quantity_in_hand_elec' => 'nullable|array',
+            'quantity_in_hand_elec.*' => 'nullable|numeric|min:0',
+            'physical_stock_elec' => 'required|array|min:1',
+            'physical_stock_elec.*' => 'required|numeric|min:0',
+            'remarks_elec' => 'nullable|array',
+            'remarks_elec.*' => 'nullable|string',
+        ]);
+
+        $currentSrNumber = $this->getNextElectricalSrNumber();
+
+        foreach ($validated['item_description_elec'] as $index => $description) {
+            $quantity = $validated['physical_stock_elec'][$index];
+            $availability = $quantity > 0 ? 'available' : 'out_of_stock';
+
+            ElectricalItem::create([
+                'sr_number' => $currentSrNumber,
+                'item_description' => $description,
+                'category_name' => $validated['category_name_elec'][$index] ?? null,
+                'make' => $validated['make_elec'][$index] ?? null,
+                'venue' => $validated['venue_elec'][$index] ?? null,
+                'location' => 'Electrical',
+                'barcode' => $validated['barcode_elec'][$index] ?? null,
+                'quantity_in_hand' => $validated['quantity_in_hand_elec'][$index] ?? 0,
+                'physical_stock' => $quantity,
+                'remarks' => $validated['remarks_elec'][$index] ?? null,
+                'availability' => $availability,
+            ]);
+
+            $lastNumber = (int) substr($currentSrNumber, 3);
+            $currentSrNumber = 'ELC' . str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
+        }
+
+        return redirect()->route('resource-officer')->with('success', 'Electrical items added successfully!');
+    }
+
     public function searchItems(Request $request)
     {
         $search = $request->query('search', '');
         $locationFilter = $request->query('location');
         $venueFilter = $request->query('venue');
-        $perPage = $request->query('per_page', 5);
 
-        $itemsQuery = Item::orderBy('created_at', 'desc');
-        
+        $items = collect()
+            ->merge(Item::orderBy('created_at', 'desc')->get())
+            ->merge(EngineeringItem::orderBy('created_at', 'desc')->get())
+            ->merge(MechanicalItem::orderBy('created_at', 'desc')->get())
+            ->merge(OperationItem::orderBy('created_at', 'desc')->get())
+            ->merge(ElectricalItem::orderBy('created_at', 'desc')->get());
+
         if ($locationFilter) {
-            $itemsQuery->where('location', $locationFilter);
+            $items = $items->filter(fn($item) => strtolower($item->location ?? '') === strtolower($locationFilter));
         }
+
         if ($venueFilter) {
-            $itemsQuery->where('venue', $venueFilter);
+            $items = $items->filter(fn($item) => strtolower($item->venue ?? '') === strtolower($venueFilter));
         }
-        
+
         if ($search) {
-            $itemsQuery->where(function ($query) use ($search) {
-                $query->where('item_description', 'like', '%' . $search . '%')
-                    ->orWhere('category_name', 'like', '%' . $search . '%')
-                    ->orWhere('supplier', 'like', '%' . $search . '%');
+            $search = strtolower($search);
+            $items = $items->filter(function ($item) use ($search) {
+                return str_contains(strtolower($item->item_description ?? ''), $search)
+                    || str_contains(strtolower($item->category_name ?? ''), $search)
+                    || str_contains(strtolower($item->supplier ?? ''), $search)
+                    || str_contains(strtolower($item->remarks ?? ''), $search)
+                    || str_contains(strtolower($item->sr_number ?? ''), $search)
+                    || str_contains(strtolower($item->sr_no ?? ''), $search)
+                    || str_contains(strtolower($item->venue ?? ''), $search)
+                    || str_contains(strtolower($item->barcode ?? ''), $search)
+                    || str_contains(strtolower($item->location ?? ''), $search);
             });
         }
 
-        $total = $itemsQuery->count();
-        $items = $itemsQuery->limit($perPage)->get();
+        $items = $items->sortByDesc('created_at')->values();
+        $total = $items->count();
 
         return response()->json([
             'items' => $items,
@@ -1086,37 +1392,21 @@ class ResourceOfficerController extends Controller
         ]);
     }
 
-    public function edit($item)
+    private function findItemByType(string $itemType, $itemId)
     {
-        $itemId = (int) $item;
-        // Since we have mixed item types, we need to find the item by checking all tables
-        // We'll use the item_type and id to determine which model to use
-        $item = null;
-        $itemType = null;
+        return match ($itemType) {
+            'main' => Item::find($itemId),
+            'engineering' => EngineeringItem::find($itemId),
+            'operations' => OperationItem::find($itemId),
+            'mechanical' => MechanicalItem::find($itemId),
+            'electrical' => ElectricalItem::find($itemId),
+            default => null,
+        };
+    }
 
-        // Try to find in main items table
-        $item = Item::find($itemId);
-        if ($item) {
-            $itemType = 'main';
-        } else {
-            // Try engineering items
-            $item = EngineeringItem::find($itemId);
-            if ($item) {
-                $itemType = 'engineering';
-            } else {
-                // Try operations items
-                $item = OperationItem::find($itemId);
-                if ($item) {
-                    $itemType = 'operations';
-                } else {
-                    // Try mechanical items
-                    $item = MechanicalItem::find($itemId);
-                    if ($item) {
-                        $itemType = 'mechanical';
-                    }
-                }
-            }
-        }
+    public function edit($itemType, $itemId)
+    {
+        $item = $this->findItemByType($itemType, $itemId);
 
         if (!$item) {
             return redirect()->route('resource-officer')->with('error', 'Item not found.');
@@ -1125,43 +1415,15 @@ class ResourceOfficerController extends Controller
         return view('resourceOfficer.edit', compact('item', 'itemType'));
     }
 
-    public function update(Request $request, $item)
+    public function update(Request $request, $itemType, $itemId)
     {
-        $itemId = (int) $item;
-        // Find the item by checking all tables
-        $item = null;
-        $model = null;
-
-        // Try to find in main items table
-        $item = Item::find($itemId);
-        if ($item) {
-            $model = Item::class;
-        } else {
-            // Try engineering items
-            $item = EngineeringItem::find($itemId);
-            if ($item) {
-                $model = EngineeringItem::class;
-            } else {
-                // Try operations items
-                $item = OperationItem::find($itemId);
-                if ($item) {
-                    $model = OperationItem::class;
-                } else {
-                    // Try mechanical items
-                    $item = MechanicalItem::find($itemId);
-                    if ($item) {
-                        $model = MechanicalItem::class;
-                    }
-                }
-            }
-        }
+        $item = $this->findItemByType($itemType, $itemId);
 
         if (!$item) {
             return redirect()->route('resource-officer')->with('error', 'Item not found.');
         }
 
-        // Validate based on item type
-        if ($model === MechanicalItem::class) {
+        if ($itemType === 'mechanical') {
             $validated = $request->validate([
                 'sr_no' => 'required|string|max:255',
                 'description' => 'required|string|max:255',
@@ -1179,7 +1441,7 @@ class ResourceOfficerController extends Controller
             $item->update($validated);
             $item->availability = ($item->balance_qty_in_store ?? 0) > 0 ? 'available' : 'out_of_stock';
             $item->save();
-        } elseif ($model === OperationItem::class) {
+        } elseif ($itemType === 'operations') {
             $validated = $request->validate([
                 'sr_no' => 'required|string|max:255',
                 'category_name' => 'nullable|string|max:255',
@@ -1199,7 +1461,7 @@ class ResourceOfficerController extends Controller
             ]);
 
             $item->update($validated);
-        } elseif ($model === EngineeringItem::class) {
+        } elseif (in_array($itemType, ['engineering', 'electrical'])) {
             $validated = $request->validate([
                 'sr_number' => 'required|string|max:255',
                 'category_name' => 'nullable|string|max:255',
@@ -1217,7 +1479,6 @@ class ResourceOfficerController extends Controller
             $item->availability = ($item->physical_stock ?? 0) > 0 ? 'available' : 'out_of_stock';
             $item->save();
         } else {
-            // Main items
             $validated = $request->validate([
                 'sr_number' => 'required|string|max:255',
                 'category_name' => 'nullable|string|max:255',
@@ -1244,36 +1505,9 @@ class ResourceOfficerController extends Controller
         return redirect()->route('resource-officer')->with('success', 'Item updated successfully.');
     }
 
-    public function destroy($item)
+    public function destroy($itemType, $itemId)
     {
-        $itemId = (int) $item;
-        // Find the item by checking all tables
-        $item = null;
-        $modelName = '';
-
-        // Try to find in main items table
-        $item = Item::find($itemId);
-        if ($item) {
-            $modelName = 'main item';
-        } else {
-            // Try engineering items
-            $item = EngineeringItem::find($itemId);
-            if ($item) {
-                $modelName = 'engineering item';
-            } else {
-                // Try operations items
-                $item = OperationItem::find($itemId);
-                if ($item) {
-                    $modelName = 'operations item';
-                } else {
-                    // Try mechanical items
-                    $item = MechanicalItem::find($itemId);
-                    if ($item) {
-                        $modelName = 'mechanical item';
-                    }
-                }
-            }
-        }
+        $item = $this->findItemByType($itemType, $itemId);
 
         if (!$item) {
             return redirect()->route('resource-officer')->with('error', 'Item not found.');
@@ -1281,6 +1515,7 @@ class ResourceOfficerController extends Controller
 
         $item->delete();
 
-        return redirect()->route('resource-officer')->with('success', ucfirst($modelName) . ' deleted successfully.');
+        return redirect()->route('resource-officer')->with('success', 'Item deleted successfully.');
     }
+
 }

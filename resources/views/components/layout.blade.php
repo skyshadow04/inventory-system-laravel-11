@@ -52,6 +52,8 @@
                                             Super Admin dashboard
                                         @elseif (auth()->user()->is_manager)
                                             Manager dashboard
+                                        @elseif (auth()->user()->is_store_watcher)
+                                            Store Watcher dashboard
                                         @else
                                             User dashboard
                                         @endif

@@ -11,7 +11,7 @@
 
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
                 @auth
-                    <a href="{{ auth()->user()->is_superadmin ? '/superadmin' : (auth()->user()->is_manager ? '/manager' : '/users') }}" class="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl">
+                    <a href="{{ auth()->user()->is_superadmin ? '/superadmin' : (auth()->user()->is_manager ? '/manager' : (auth()->user()->is_store_watcher ? '/store-watcher' : '/users')) }}" class="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl">
                         Go to Dashboard
                         <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>

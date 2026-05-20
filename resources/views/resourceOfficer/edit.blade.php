@@ -5,7 +5,7 @@
             @if (session('success'))
                 <div class="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg">{{ session('success') }}</div>
             @endif
-            <form action="{{ route('resource-officer.item.update', $item) }}" method="POST" class="space-y-4">
+            <form action="{{ route('resource-officer.item.update', ['itemType' => $itemType, 'item' => $item->getKey()]) }}" method="POST" class="space-y-4">
                 @csrf
                 @method('PUT')
 
@@ -163,8 +163,8 @@
                         @error('reconciliation')<p class="text-red-500 text-sm mt-1">{{ $message }}</p>@enderror
                     </div>
 
-                @elseif($itemType === 'engineering')
-                    <!-- Engineering Item Fields -->
+                @elseif(in_array($itemType, ['engineering', 'electrical']))
+                    <!-- Engineering / Electrical Item Fields -->
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Sr# (ID) *</label>
                         <input type="text" name="sr_number" value="{{ old('sr_number', $item->sr_number) }}" required class="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500" />

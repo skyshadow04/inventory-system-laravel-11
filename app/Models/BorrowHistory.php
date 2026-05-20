@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\EngineeringItem;
 use App\Models\MechanicalItem;
 use App\Models\OperationItem;
+use App\Models\ElectricalItem;
 
 class BorrowHistory extends Model
 {
@@ -76,6 +77,12 @@ class BorrowHistory extends Model
             if ($item) return $item;
         }
 
+        // Check Electrical items (ELC prefix)
+        if (str_starts_with($itemId, 'ELC')) {
+            $item = \App\Models\ElectricalItem::where('sr_number', $itemId)->first();
+            if ($item) return $item;
+        }
+
         // Fallback to original relationship
         return $this->item;
     }
@@ -83,18 +90,29 @@ class BorrowHistory extends Model
     public function getItemGroup()
     {
         $item = $this->getItem();
+        $user = $this->user;
         $location = strtolower(trim($item->location ?? ''));
 
-        return match (true) {
+        // Determine item group based on location
+        $itemGroup = match (true) {
             $location === 'app' => 'APP',
             $location === 'engg / ins' => 'Engineering',
             $location === 'engg / mec' => 'Mechanical',
             $location === 'optns' => 'Operations',
+            $location === 'electrical' => 'Electrical',
             str_contains($location, 'engg') => 'Engineering',
             str_contains($location, 'mec') => 'Mechanical',
             str_contains($location, 'opt') => 'Operations',
             str_contains($location, 'app') => 'APP',
+            str_contains($location, 'electrical') => 'Electrical',
             default => 'APP',
         };
+
+        // If Instrument user borrowed Engineering items, route to Engineering managers
+        if ($user && $user->user_group === 'Instrument' && $itemGroup === 'Engineering') {
+            return 'Engineering';
+        }
+
+        return $itemGroup;
     }
 }

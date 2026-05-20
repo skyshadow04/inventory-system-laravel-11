@@ -2,18 +2,7 @@
     <div class="py-10 px-3 sm:px-6 lg:px-8">
         <div class="w-full">
             <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h1 class="text-2xl font-bold text-slate-800">Inventory Management</h1>
-                <div class="flex flex-wrap gap-2">
-                    <?php 
-                    ?>
-                    <a href="{{ route('resource-officer.form') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">Add Items</a> 
-                    
-                    <a href="{{ route('resource-officer.import') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import APP Items</a>
-                    <a href="{{ route('resource-officer.import-engineering') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Engineering Items</a>
-                    <a href="{{ route('resource-officer.import-operation') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Operation Items</a>
-                    <a href="{{ route('resource-officer.import-mechanical') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Mechanical Items</a>
-                    <a href="{{ route('resource-officer.import-electrical') }}" class="inline-flex items-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg shadow hover:bg-slate-200">Import Electrical Items</a>
-                </div>
+                <h1 class="text-2xl font-bold text-slate-800">Store Watcher Dashboard</h1>
             </div>
 
             @if (session('success'))
@@ -27,6 +16,66 @@
                 </div>
             @endif
 
+            <!-- Pending Approvals Section -->
+            <div class="mb-10">
+                <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Pending Approvals</h2>
+                        <p class="text-sm text-slate-600">Borrow requests pending approval from managers across all groups.</p>
+                    </div>
+                    <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
+                        <label for="pending_approvals_per_page" class="text-sm text-slate-700">Per page:</label>
+                        <select id="pending_approvals_per_page" name="pending_approvals_per_page" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
+                            <option value="5" {{ ($pendingApprovalsPerPage ?? 5) == 5 ? 'selected' : '' }}>5</option>
+                            <option value="10" {{ ($pendingApprovalsPerPage ?? 5) == 10 ? 'selected' : '' }}>10</option>
+                            <option value="100" {{ ($pendingApprovalsPerPage ?? 5) == 100 ? 'selected' : '' }}>100</option>
+                        </select>
+                    </form>
+                </div>
+
+                @if($pendingApprovals->isEmpty())
+                    <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-200 text-gray-600">
+                        No pending approval requests.
+                    </div>
+                @else
+                    <div class="rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 bg-white text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">User</th>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Manager</th>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Item</th>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Description</th>
+                                    <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Qty</th>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Requested</th>
+                                    <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @foreach($pendingApprovals as $request)
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-3 py-2 text-gray-800">{{ $request->user->name }}</td>
+                                        <td class="px-3 py-2 text-gray-800">{{ $request->manager_names ?? '–' }}</td>
+                                        <td class="px-3 py-2 text-gray-800">{{ $request->item_name }}</td>
+                                        <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $request->item_description ?? '–' }}</td>
+                                        <td class="px-3 py-2 text-center text-gray-800">{{ $request->quantity }}</td>
+                                        <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $request->created_at->format('m-d H:i') }}</td>
+                                        <td class="px-3 py-2 text-center">
+                                            <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-4">
+                        {{ $pendingApprovals->appends(request()->except('pending_approvals_page'))->links() }}
+                    </div>
+                @endif
+            </div>
+
+            <!-- Inventory Items Section -->
             @if($items->isEmpty())
                 <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-200 text-gray-600">
                     No inventory items found.
@@ -34,7 +83,7 @@
             @else
                 <div class="mb-4 flex flex-col gap-4">
                     <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
-                        <p class="text-sm text-slate-600">Showing <span id="itemsStart">{{ $items->firstItem() ?? 0 }}</span> to <span id="itemsEnd">{{ $items->lastItem() ?? 0 }}</span> of <span id="itemsTotal">{{ $items->total() }}</span> items</p>
+                        <h2 class="text-2xl font-bold text-slate-800">Inventory Items</h2>
                         <div class="flex items-center gap-2">
                             <input type="text" id="searchInput" placeholder="Search items..." value="{{ $searchQuery ?? '' }}" class="px-3 py-2 rounded border border-gray-300 text-sm" />
                             @if($searchQuery)
@@ -76,7 +125,6 @@
                     <table class="min-w-full divide-y divide-gray-200 bg-white text-sm">
                         <thead class="bg-gray-50">
                             <tr>
-                                <!-- <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">#</th> -->
                                 <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Sr#</th>
                                 <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Item Description</th>
                                 <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Category</th>
@@ -93,13 +141,11 @@
                                 <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Remarks</th>
                                 <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Status</th>
                                 <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Created</th>
-                                <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100" id="itemsTableBody">
                             @foreach($items as $item)
                                 <tr class="hover:bg-gray-50">
-                                    <!-- <td class="px-3 py-2 text-gray-800">{{ $items->firstItem() + $loop->index }}</td> -->
                                     <td class="px-3 py-2 text-gray-800">{{ $item->sr_number }}</td>
                                     <td class="px-3 py-2 text-gray-800 line-clamp-2">{{ $item->item_description }}</td>
                                     <td class="px-3 py-2 text-gray-700">{{ $item->category_name ?? '–' }}</td>
@@ -125,14 +171,6 @@
                                         </span>
                                     </td>
                                     <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $item->created_at->format('m-d H:i') }}</td>
-                                    <td class="px-3 py-2 text-center space-x-1">
-                                        <a href="{{ route('resource-officer.item.edit', ['itemType' => $item->item_type ?? 'main', 'item' => $item->getKey()]) }}" class="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 inline-block">Edit</a>
-                                        <form action="{{ route('resource-officer.item.destroy', ['itemType' => $item->item_type ?? 'main', 'item' => $item->getKey()]) }}" method="POST" class="inline-block">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" onclick="return confirm('Delete this item?')" class="px-2 py-1 text-xs font-medium rounded bg-red-500 text-white hover:bg-red-600">Del</button>
-                                        </form>
-                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -144,6 +182,7 @@
                 </div>
             @endif
 
+            <!-- Approved Borrow Requests Section -->
             <div class="mt-10">
                 <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -174,24 +213,23 @@
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Description</th>
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Qty</th>
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Requested</th>
-                                    <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                @foreach($approvedRequests as $request)
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-3 py-2 text-gray-800">{{ $request->user->name }}</td>
-                                        <td class="px-3 py-2 text-gray-800">{{ $request->item_name }}</td>
-                                        <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $request->item_description ?? '–' }}</td>
-                                        <td class="px-3 py-2 text-center text-gray-800">{{ $request->quantity }}</td>
-                                        <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $request->created_at->format('m-d H:i') }}</td>
-                                        <td class="px-3 py-2 text-center space-x-1">
-                                            <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">Approved</span>
-                                            <form action="{{ route('resource-officer.borrow-request.release', $request) }}" method="POST" class="inline-block">
-                                                @csrf
-                                                <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Release</button>
-                                            </form>
-                                        </td>
+                            <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        @foreach($approvedRequests as $request)
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-gray-800">{{ $request->user->name }}</td>
+                                <td class="px-3 py-2 text-gray-800">{{ $request->item_name }}</td>
+                                <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $request->item_description ?? '–' }}</td>
+                                <td class="px-3 py-2 text-center text-gray-800">{{ $request->quantity }}</td>
+                                <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $request->created_at->format('m-d H:i') }}</td>
+                                <td class="px-3 py-2 text-center space-x-1">
+                                    <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">Approved</span>
+                                    <form action="{{ route('store-watcher.borrow-request.release', $request) }}" method="POST" class="inline-block">
+                                        @csrf
+                                        <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Release</button>
+                                    </form>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -204,11 +242,12 @@
                 @endif
             </div>
 
+            <!-- Currently Borrowed Items Section -->
             <div class="mt-10">
                 <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 class="text-2xl font-bold text-slate-800">Currently Borrowed Items</h2>
-                        <p class="text-sm text-slate-600">Items currently out on loan that the resource officer can track.</p>
+                        <p class="text-sm text-slate-600">Items currently out on loan.</p>
                     </div>
                     <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
                         <label for="current_per_page" class="text-sm text-slate-700">Per page:</label>
@@ -268,6 +307,7 @@
                 @endif
             </div>
 
+            <!-- Pending Return Requests Section -->
             <div class="mt-10">
                 <div class="mb-4 flex items-center justify-between">
                     <h2 class="text-2xl font-bold text-slate-800">Pending Return Requests</h2>
@@ -296,28 +336,27 @@
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Qty</th>
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Borrowed</th>
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Return Req</th>
-                                    <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                @foreach($pendingReturns as $return)
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-3 py-2 text-gray-800">{{ $return->user->name }}</td>
-                                        <td class="px-3 py-2 text-gray-800">{{ $return->item_name }}</td>
-                                        <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $return->item_description ?? '–' }}</td>
-                                        <td class="px-3 py-2 text-center text-gray-800">{{ $return->count }}</td>
-                                        <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $return->borrowed_at->format('m-d H:i') }}</td>
-                                        <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $return->return_requested_at->format('m-d H:i') }}</td>
-                                        <td class="px-3 py-2 text-center space-x-1">
-                                            <form action="{{ route('resource-officer.return.approve', $return) }}" method="POST" class="inline-block">
-                                                @csrf
-                                                <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600">OK</button>
-                                            </form>
-                                            <form action="{{ route('resource-officer.return.reject', $return) }}" method="POST" class="inline-block">
-                                                @csrf
-                                                <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-red-500 text-white hover:bg-red-600">Rej</button>
-                                            </form>
-                                        </td>
+                            <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        @foreach($pendingReturns as $return)
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-3 py-2 text-gray-800">{{ $return->user->name }}</td>
+                                <td class="px-3 py-2 text-gray-800">{{ $return->item_name }}</td>
+                                <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $return->item_description ?? '–' }}</td>
+                                <td class="px-3 py-2 text-center text-gray-800">{{ $return->count }}</td>
+                                <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $return->borrowed_at->format('m-d H:i') }}</td>
+                                <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ $return->return_requested_at->format('m-d H:i') }}</td>
+                                <td class="px-3 py-2 text-center space-x-1">
+                                    <form action="{{ route('store-watcher.return.approve', $return) }}" method="POST" class="inline-block">
+                                        @csrf
+                                        <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600">OK</button>
+                                    </form>
+                                    <form action="{{ route('store-watcher.return.reject', $return) }}" method="POST" class="inline-block">
+                                        @csrf
+                                        <button type="submit" class="px-2 py-1 text-xs font-medium rounded bg-red-500 text-white hover:bg-red-600">Rej</button>
+                                    </form>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -330,11 +369,15 @@
                 @endif
             </div>
 
+            <!-- Borrow History Section -->
             <div class="mt-10">
                 <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 class="text-2xl font-bold text-slate-800">Borrow History</h2>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Borrow History</h2>
+                        <p class="text-sm text-slate-600">Completed returns and rejected requests are recorded here for review.</p>
+                    </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <a href="{{ route('resource-officer.borrow-history.export') }}" class="inline-flex items-center px-4 py-2 bg-yellow-100 text-black rounded-lg shadow hover:bg-slate-900">Export History</a>
+                        <a href="{{ route('store-watcher.borrow-history.export') }}" class="inline-flex items-center px-4 py-2 bg-yellow-100 text-black rounded-lg shadow hover:bg-slate-900">Export History</a>
                         <form method="GET" action="{{ url()->current() }}" class="flex items-center gap-2">
                             <label for="history_per_page" class="text-sm text-slate-700">Per page:</label>
                             <select id="history_per_page" name="history_per_page" onchange="this.form.submit()" class="px-3 py-1 rounded border border-gray-300">
@@ -362,6 +405,7 @@
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Borrowed</th>
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Returned</th>
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">Status</th>
+                                    <th class="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Notes</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
@@ -382,6 +426,7 @@
                                                 <span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">Completed</span>
                                             @endif
                                         </td>
+                                        <td class="px-3 py-2 text-gray-700 line-clamp-2">{{ $history->admin_return_notes ?? '–' }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -397,166 +442,41 @@
     </div>
 
     <script>
-        const RESOURCE_OFFICER_SCROLL_KEY = 'resourceOfficerScrollPos';
+        const STORE_WATCHER_SCROLL_KEY = 'storeWatcherScrollPos';
 
-        function saveScrollPosition() {
-            sessionStorage.setItem(RESOURCE_OFFICER_SCROLL_KEY, window.scrollY);
-        }
-
-        function restoreScrollPosition() {
-            const storedScroll = sessionStorage.getItem(RESOURCE_OFFICER_SCROLL_KEY);
-            if (storedScroll !== null) {
-                window.scrollTo(0, parseInt(storedScroll, 10));
-                sessionStorage.removeItem(RESOURCE_OFFICER_SCROLL_KEY);
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // Restore scroll position on page load
-            restoreScrollPosition();
-
-            // Save scroll position before form submission
-            document.querySelectorAll('form').forEach((form) => {
-                form.addEventListener('submit', saveScrollPosition);
-            });
-
-            // Auto-refresh functionality for dynamic content
-            @if(!$approvedRequests->isEmpty() || !$pendingReturns->isEmpty())
-                // Store initial counts
-                let initialApprovedRequests = {{ $approvedRequests->count() }};
-                let initialPendingReturns = {{ $pendingReturns->count() }};
-
-                setInterval(() => {
-                    if (!document.hidden) {
-                        // Check for changes before reloading
-                        fetch('/resource-officer/check-changes', {
-                            headers: {
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.approved_requests !== initialApprovedRequests ||
-                                data.pending_returns !== initialPendingReturns) {
-                                window.location.reload();
-                            }
-                        })
-                        .catch(error => {
-                            console.log('Error checking for changes:', error);
-                        });
-                    }
-                }, 10000); // Check every 10 seconds if there are pending items
-            @endif
-
-            // Real-time search functionality
-            const searchInput = document.getElementById('searchInput');
-            const resourceSearchUrl = '{{ route('resource-officer.search-items') }}';
-            if (searchInput) {
-                let searchTimeout;
-                const performSearch = () => {
-                    const query = searchInput.value.trim();
-                    const params = new URLSearchParams(window.location.search);
-                    params.set('search', query);
-                    params.set('location', params.get('location') || '');
-                    params.set('venue', params.get('venue') || '');
-
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(() => {
-                        fetch(`${resourceSearchUrl}?${params.toString()}`, {
-                            credentials: 'same-origin',
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Accept': 'application/json'
-                            }
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                if (response.status === 401) {
-                                    window.location.href = '/login';
-                                    return;
-                                }
-                                throw new Error('HTTP error ' + response.status);
-                            }
-
-                            const contentType = response.headers.get('content-type') || '';
-                            if (!contentType.includes('application/json')) {
-                                window.location.href = '/login';
-                                throw new Error('Unexpected response content type: ' + contentType);
-                            }
-
-                            return response.json();
-                        })
-                        .then(data => {
-                            updateItemsTable(data.items);
-                            document.getElementById('itemsStart').textContent = data.items.length > 0 ? 1 : 0;
-                            document.getElementById('itemsEnd').textContent = data.items.length;
-                            document.getElementById('itemsTotal').textContent = data.total;
-                        })
-                        .catch(error => console.error('Search error:', error));
-                    }, 250);
-                };
-
-                searchInput.addEventListener('input', performSearch);
-            }
-
-            function updateItemsTable(items) {
-                const tbody = document.getElementById('itemsTableBody');
-                if (!tbody) return;
-
-                if (items.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="17" class="px-4 py-8 text-center text-gray-600">No items found</td></tr>';
-                    return;
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const searchValue = this.value.trim();
+                const url = new URL(window.location);
+                if (searchValue) {
+                    url.searchParams.set('search', searchValue);
+                } else {
+                    url.searchParams.delete('search');
                 }
-
-                tbody.innerHTML = items.map(item => {
-                    const isAvailable = (item.physical_stock ?? 0) > 0 && item.availability === 'available';
-                    const availabilityClass = isAvailable ? 'bg-green-100 text-green-800' : 
-                        (item.availability === 'unavailable' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800');
-                    const availabilityText = isAvailable ? 'Ava' : item.availability.replace(/_/g, ' ').charAt(0).toUpperCase() + item.availability.replace(/_/g, ' ').slice(1);
-
-                    return `
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-2 text-gray-800">${item.sr_number}</td>
-                            <td class="px-3 py-2 text-gray-800 line-clamp-2">${item.item_description}</td>
-                            <td class="px-3 py-2 text-gray-700">${item.category_name || '–'}</td>
-                            <td class="px-3 py-2 text-gray-800">${item.supplier || '–'}</td>
-                            <td class="px-3 py-2 text-gray-800">${item.venue || '–'}</td>
-                            <td class="px-3 py-2 text-gray-800">${item.barcode || '–'}</td>
-                            <td class="px-3 py-2 text-right text-gray-800">${item.total_in || '–'}</td>
-                            <td class="px-3 py-2 text-right text-gray-800">${item.total_out || '–'}</td>
-                            <td class="px-3 py-2 text-right text-gray-800">${item.total_return || '–'}</td>
-                            <td class="px-3 py-2 text-right text-gray-800 font-semibold">${item.quantity_in_hand_current}</td>
-                            <td class="px-3 py-2 text-right text-gray-800">${item.physical_stock || '–'}</td>
-                            <td class="px-3 py-2 text-gray-700">${item.reconciliation || '–'}</td>
-                            <td class="px-3 py-2 text-right text-gray-800">${item.difference || '–'}</td>
-                            <td class="px-3 py-2 text-gray-700 line-clamp-2">${item.remarks || '–'}</td>
-                            <td class="px-3 py-2 text-center">
-                                <span class="inline-block px-2 py-1 text-xs font-medium rounded-full ${availabilityClass}">
-                                    ${availabilityText.substring(0, 3)}
-                                </span>
-                            </td>
-                            <td class="px-3 py-2 text-gray-600 whitespace-nowrap">${new Date(item.created_at).toLocaleString('en-US', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</td>
-                            <td class="px-3 py-2 text-center space-x-1">
-                                <a href="/resource-officer/item/${item.sr_number}/edit" class="text-blue-600 hover:underline">Edit</a>
-                                <form action="/resource-officer/item/${item.sr_number}" method="POST" class="inline" onsubmit="return confirm('Delete this item?')">
-                                    <input type="hidden" name="_method" value="DELETE">
-                                    <input type="hidden" name="_token" value="${document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')}">
-                                    <button type="submit" class="text-red-600 hover:underline">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                url.searchParams.delete('page'); // Reset to first page
+                window.location.href = url.toString();
             }
+        });
 
-            function clearSearch() {
-                document.getElementById('searchInput').value = '';
-                const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
-                const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
-                const perPage = new URLSearchParams(window.location.search).get('per_page') || '5';
-                window.location.href = `?per_page=${perPage}&location=${locationFilter}&venue=${venueFilter}`;
+        function clearSearch() {
+            const url = new URL(window.location);
+            url.searchParams.delete('search');
+            url.searchParams.delete('page');
+            window.location.href = url.toString();
+        }
+
+        // Save scroll position
+        window.addEventListener('beforeunload', function() {
+            localStorage.setItem(STORE_WATCHER_SCROLL_KEY, window.scrollY);
+        });
+
+        // Restore scroll position
+        window.addEventListener('load', function() {
+            const scrollPos = localStorage.getItem(STORE_WATCHER_SCROLL_KEY);
+            if (scrollPos) {
+                window.scrollTo(0, parseInt(scrollPos));
+                localStorage.removeItem(STORE_WATCHER_SCROLL_KEY);
             }
         });
     </script>

@@ -3,7 +3,6 @@
         <div class="max-w-6xl mx-auto">
             <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Available Electrical Devices / Equipments</h1>
                     @php
                         $userGroup = auth()->user()->user_group ?? 'APP';
                         $groupDisplayNames = [
@@ -11,8 +10,19 @@
                             'Engineering' => 'Engineering (Engg/INS)',
                             'Mechanical' => 'Mechanical (ENGG/MEC)',
                             'Operations' => 'Operations (OPTNS)',
+                            'Electrical' => 'Electrical',
+                            'Instrument' => 'Instrument Group',
+                        ];
+                        $groupTitles = [
+                            'APP' => 'Available APP Items',
+                            'Engineering' => 'Available Engineering Items',
+                            'Mechanical' => 'Available Mechanical Items',
+                            'Operations' => 'Available Operation Items',
+                            'Electrical' => 'Available Electrical Devices / Equipments',
+                            'Instrument' => 'Available Instrument Items',
                         ];
                     @endphp
+                    <h1 class="text-2xl font-bold text-slate-800">{{ $groupTitles[$userGroup] ?? 'Available Items' }}</h1>
                     <p class="text-sm text-slate-600">Viewing items for: <span class="font-semibold">{{ $groupDisplayNames[$userGroup] ?? $userGroup }}</span></p>
                 </div>
                 <div>
@@ -159,7 +169,7 @@
                                                     @elseif($hasApprovedRequest)
                                                         <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-blue-100 text-blue-800">Approved - Waiting Release</span>
                                                     @elseif(($item->physical_stock ?? 0) > 0)
-                                                        <button type="button" onclick="showBorrowModal('{{ $item->sr_number }}', {{ json_encode($item->item_description) }}, {{ $item->physical_stock }})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>
+                                                        <button type="button" onclick='showBorrowModal({{ json_encode($item->sr_number) }}, {{ json_encode($item->item_description) }}, {{ json_encode($item->physical_stock) }})' class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>
                                                     @else
                                                         <span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Out of Stock</span>
                                                     @endif
@@ -207,7 +217,11 @@
                                     <thead class="bg-gray-50">
                                         <tr>
                                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Date</th>
+                                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Borrower</th>
                                             <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Item</th>
+                                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Location</th>
+                                            <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Venue</th>
+                                            <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Quantity</th>
                                             <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Return Status</th>
                                             <th class="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
                                         </tr>
@@ -216,7 +230,12 @@
                                         @foreach($currentBorrowed as $entry)
                                             <tr>
                                                 <td class="px-4 py-3 text-sm text-gray-800">{{ $entry->borrowed_at->format('Y-m-d H:i') }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-800">{{ $entry->user->name ?? '–' }}</td>
                                                 <td class="px-4 py-3 text-sm text-gray-800">{{ $entry->item_description ?? '–' }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-800">{{ $entry->getItem()->location ?? '–' }}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-800">{{ $entry->getItem()->venue ?? '–' }}</td>
+                                                <td class="px-4 py-3 text-center text-sm text-gray-800">{{ $entry->count ?? '–' }}</td>
+                                                
                                                 <td class="px-4 py-3 text-center">
                                                     @if($entry->return_status === 'pending')
                                                         <span class="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">Pending Approval</span>
@@ -347,35 +366,56 @@
         const USER_GROUP = '{{ $userGroup }}';
 
         // Real-time search functionality
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const searchUrl = '{{ route('users.search-items') }}';
+
+            if (!searchInput) {
+                return;
+            }
+
             let searchTimeout;
-            searchInput.addEventListener('keyup', function() {
+            const performSearch = () => {
+                const query = searchInput.value.trim();
+                const params = new URLSearchParams(window.location.search);
+                params.set('search', query);
+                params.set('location', params.get('location') || '');
+                params.set('venue', params.get('venue') || '');
+                params.set('per_page', params.get('per_page') || '10');
+
                 clearTimeout(searchTimeout);
-                const query = this.value.trim();
-                
                 searchTimeout = setTimeout(() => {
-                    const locationFilter = new URLSearchParams(window.location.search).get('location') || '';
-                    const perPage = new URLSearchParams(window.location.search).get('per_page') || '10';
-                    
-                    const venueFilter = new URLSearchParams(window.location.search).get('venue') || '';
-                    fetch(`/users/search-items?search=${encodeURIComponent(query)}&location=${encodeURIComponent(locationFilter)}&venue=${encodeURIComponent(venueFilter)}&per_page=${perPage}`, {
+                    fetch(`${searchUrl}?${params.toString()}`, {
                         headers: {
                             'X-Requested-With': 'XMLHttpRequest',
                             'Accept': 'application/json'
                         }
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                window.location.href = '/login';
+                                return;
+                            }
+                            throw new Error('HTTP error ' + response.status);
+                        }
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) {
+                            return;
+                        }
                         updateItemsTable(data.items, data.pending_item_ids, data.approved_item_ids);
                         document.getElementById('itemsStart').textContent = data.items.length > 0 ? 1 : 0;
                         document.getElementById('itemsEnd').textContent = data.items.length;
                         document.getElementById('itemsTotal').textContent = data.total;
                     })
                     .catch(error => console.error('Search error:', error));
-                }, 300);
-            });
-        }
+                }, 250);
+            };
+
+            searchInput.addEventListener('input', performSearch);
+        });
 
         function updateItemsTable(items, pendingIds, approvedIds) {
             const tbody = document.getElementById('itemsTableBody');
@@ -388,11 +428,14 @@
             }
 
             tbody.innerHTML = items.map(item => {
-                const hasPending = pendingIds.includes(item.sr_number || item.sr_no);
-                const hasApproved = approvedIds.includes(item.sr_number || item.sr_no);
+                const normalizedPendingIds = pendingIds.map(String);
+                const normalizedApprovedIds = approvedIds.map(String);
+                const itemKey = String(item.sr_number ?? item.sr_no ?? '');
+                const hasPending = normalizedPendingIds.includes(itemKey);
+                const hasApproved = normalizedApprovedIds.includes(itemKey);
                 const availabilityLower = (item.availability || '').toLowerCase();
                 const isAvailable = (item.physical_stock ?? 0) > 0;
-                const itemId = item.sr_number || item.sr_no;
+                const itemId = itemKey;
                 
                 let actionHtml = '';
                 if (hasPending) {
@@ -400,7 +443,7 @@
                 } else if (hasApproved) {
                     actionHtml = '<span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-blue-100 text-blue-800">Approved - Waiting Release</span>';
                 } else if (isAvailable) {
-                    actionHtml = `<button type="button" onclick="showBorrowModal('${itemId}', ${JSON.stringify(item.item_description)}, ${item.physical_stock})" class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>`;
+                    actionHtml = `<button type="button" onclick='showBorrowModal(${JSON.stringify(itemId)}, ${JSON.stringify(item.item_description)}, ${JSON.stringify(item.physical_stock)})' class="px-3 py-2 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700">Borrow Item</button>`;
                 } else {
                     actionHtml = '<span class="inline-flex items-center px-3 py-2 text-xs font-medium rounded bg-gray-200 text-gray-600">Out of Stock</span>';
                 }
@@ -507,8 +550,9 @@
                 // Store initial counts
                 let initialPendingRequests = {{ $pendingRequests->count() }};
                 let initialApprovedRequests = {{ $approvedRequestItemIds ? count($approvedRequestItemIds) : 0 }};
+                let checkChangesInterval;
 
-                setInterval(() => {
+                checkChangesInterval = setInterval(() => {
                     if (!document.hidden) {
                         // Check for changes before reloading
                         fetch('/users/check-changes', {
@@ -518,18 +562,34 @@
                                 'X-Requested-With': 'XMLHttpRequest'
                             }
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 419) {
+                                // CSRF token expired or user logged out, stop checking
+                                clearInterval(checkChangesInterval);
+                                return;
+                            }
+                            return response.json();
+                        })
                         .then(data => {
-                            if (data.pending_requests !== initialPendingRequests ||
-                                data.approved_requests !== initialApprovedRequests) {
+                            if (data && (data.pending_requests !== initialPendingRequests ||
+                                data.approved_requests !== initialApprovedRequests)) {
                                 window.location.reload();
                             }
                         })
                         .catch(error => {
                             console.log('Error checking for changes:', error);
+                            // If there's an authentication error, stop the interval
+                            if (error.message.includes('419') || error.message.includes('CSRF')) {
+                                clearInterval(checkChangesInterval);
+                            }
                         });
                     }
                 }, 8000);
+
+                // Clear interval when page is unloaded (user navigates away or logs out)
+                window.addEventListener('beforeunload', () => {
+                    clearInterval(checkChangesInterval);
+                });
             @endif
         });
     </script>

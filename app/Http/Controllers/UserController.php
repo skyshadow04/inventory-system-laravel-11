@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\BorrowHistory;
 use App\Models\BorrowRequest;
+use App\Models\ElectricalItem;
 use App\Models\EngineeringItem;
+use App\Models\InstrumentItem;
 use App\Models\Item;
 use App\Models\MechanicalItem;
 use App\Models\OperationItem;
@@ -35,6 +37,8 @@ class UserController extends Controller
             'Engineering' => [EngineeringItem::class, ['Engg / INS']],
             'Mechanical' => [MechanicalItem::class, ['ENGG / MEC']],
             'Operations' => [OperationItem::class, ['OPTNS']],
+            'Electrical' => [ElectricalItem::class, ['Electrical']],
+            'Instrument' => [EngineeringItem::class, ['Engg / INS']],
         ];
 
         [$itemModel, $allowedLocations] = $groupModelMapping[$userGroup] ?? [Item::class, ['APP']];
@@ -70,16 +74,31 @@ class UserController extends Controller
             $itemsQuery->where('venue', $venueFilter);
         }
         if ($searchQuery) {
-            $itemsQuery->where(function ($query) use ($searchQuery) {
-                $query->where('item_description', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('category_name', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('supplier', 'like', '%' . $searchQuery . '%')
-                    ->orWhere('remarks', 'like', '%' . $searchQuery . '%');
+            $searchColumns = ['item_description', 'category_name'];
+            if ($itemModel === Item::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_number', 'supplier', 'remarks', 'venue']);
+            } elseif ($itemModel === EngineeringItem::class || $itemModel === ElectricalItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_number', 'remarks', 'venue']);
+            } elseif ($itemModel === OperationItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_no', 'supplier', 'remarks', 'venue']);
+            } elseif ($itemModel === MechanicalItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_no', 'remarks']);
+            }
+
+            $itemsQuery->where(function ($query) use ($searchQuery, $searchColumns) {
+                foreach ($searchColumns as $index => $column) {
+                    if ($index === 0) {
+                        $query->where($column, 'like', '%' . $searchQuery . '%');
+                    } else {
+                        $query->orWhere($column, 'like', '%' . $searchQuery . '%');
+                    }
+                }
             });
         }
         $items = $itemsQuery->paginate($perPage)->withQueryString();
 
         $currentBorrowed = auth()->user()->borrowHistories()
+            ->with('item')
             ->whereNull('returned_at')
             ->where(function ($query) {
                 $query->whereNull('return_status')
@@ -88,6 +107,7 @@ class UserController extends Controller
             ->latest('borrowed_at')
             ->paginate($currentPerPage, ['*'], 'current_page', $currentBorrowedPage);
         $borrowHistory = auth()->user()->borrowHistories()
+            ->with('item')
             ->where(function ($query) {
                 $query->whereNotNull('returned_at')
                     ->orWhere('return_status', 'rejected');
@@ -108,6 +128,9 @@ class UserController extends Controller
         if (!$item) {
             return redirect()->back()->with('error', 'Item not found.');
         }
+
+        // No location restrictions for "View All Items" - all users can borrow any items
+        // Requests will be routed to the appropriate managers based on item type
 
         $existingRequest = auth()->user()->borrowRequests()
             ->where('item_id', $item->sr_number)
@@ -138,30 +161,49 @@ class UserController extends Controller
 
     public function borrow($itemId, Request $request)
     {
-        // Determine which model to use based on user group
-        $user = auth()->user();
-        $userGroup = $user->user_group ?? 'APP';
+        // Find the item in any table based on the item_id format
+        $item = null;
 
-        $groupModelMapping = [
-            'APP' => [Item::class, 'sr_number'],
-            'Engineering' => [EngineeringItem::class, 'sr_number'],
-            'Mechanical' => [MechanicalItem::class, 'sr_no'],
-            'Operations' => [OperationItem::class, 'sr_no'],
-        ];
+        // Check APP items first (numeric IDs)
+        if (is_numeric($itemId)) {
+            $item = Item::where('sr_number', $itemId)->first();
+        }
 
-        [$modelClass, $srColumn] = $groupModelMapping[$userGroup] ?? [Item::class, 'sr_number'];
-        $item = $modelClass::where($srColumn, $itemId)->first();
+        // Check Engineering items (E prefix)
+        if (!$item && str_starts_with($itemId, 'E')) {
+            $item = EngineeringItem::where('sr_number', $itemId)->first();
+        }
+
+        // Check Mechanical items (ME prefix)
+        if (!$item && str_starts_with($itemId, 'ME')) {
+            $item = MechanicalItem::where('sr_no', $itemId)->first();
+        }
+
+        // Check Operations items (OP prefix)
+        if (!$item && str_starts_with($itemId, 'OP')) {
+            $item = OperationItem::where('sr_no', $itemId)->first();
+        }
+
+        // Check Electrical items (ELC prefix)
+        if (!$item && str_starts_with($itemId, 'ELC')) {
+            $item = ElectricalItem::where('sr_number', $itemId)->first();
+        }
 
         if (!$item) {
             return redirect()->back()->with('error', 'Item not found.');
         }
 
         // Check if user has access to this item's location
+        $user = auth()->user();
+        $userGroup = $user->user_group ?? 'APP';
+
         $groupLocationMapping = [
-            'APP' => ['APP'],
+            'APP' => ['APP', 'Electrical'], // APP users can borrow from APP and Electrical locations
             'Engineering' => ['Engg / INS'],
+            'Instrument' => ['Engg / INS'],
             'Mechanical' => ['ENGG / MEC'],
             'Operations' => ['OPTNS'],
+            'Electrical' => ['APP', 'Engg / INS', 'ENGG / MEC', 'OPTNS', 'Electrical'], // Electrical users can borrow from any location
         ];
 
         $allowedLocations = $groupLocationMapping[$userGroup] ?? ['APP'];
@@ -261,6 +303,13 @@ class UserController extends Controller
             }
         }
 
+        if (str_starts_with($itemId, 'ELC')) {
+            $item = ElectricalItem::where('sr_number', $itemId)->first();
+            if ($item) {
+                return $item;
+            }
+        }
+
         return null;
     }
 
@@ -281,6 +330,8 @@ class UserController extends Controller
             'Engineering' => [EngineeringItem::class, ['Engg / INS']],
             'Mechanical' => [MechanicalItem::class, ['ENGG / MEC']],
             'Operations' => [OperationItem::class, ['OPTNS']],
+            'Electrical' => [ElectricalItem::class, ['Electrical']],
+            'Instrument' => [EngineeringItem::class, ['Engg / INS']],
         ];
 
         [$itemModel, $allowedLocations] = $groupModelMapping[$userGroup] ?? [Item::class, ['APP']];
@@ -299,16 +350,36 @@ class UserController extends Controller
         }
 
         if ($search) {
-            $itemsQuery->where(function ($query) use ($search) {
-                $query->where('item_description', 'like', '%' . $search . '%')
-                    ->orWhere('category_name', 'like', '%' . $search . '%')
-                    ->orWhere('supplier', 'like', '%' . $search . '%')
-                    ->orWhere('remarks', 'like', '%' . $search . '%');
-            });
+            $searchColumns = ['item_description', 'category_name'];
+            if ($itemModel === Item::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_number', 'supplier', 'remarks', 'venue']);
+            } elseif ($itemModel === EngineeringItem::class || $itemModel === ElectricalItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_number', 'remarks', 'venue']);
+            } elseif ($itemModel === OperationItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_no', 'supplier', 'remarks', 'venue']);
+            } elseif ($itemModel === MechanicalItem::class) {
+                $searchColumns = array_merge($searchColumns, ['sr_no', 'remarks']);
+            }
+
+            $searchColumns = array_values(array_filter($searchColumns, function ($column) use ($tableName) {
+                return Schema::hasColumn($tableName, $column);
+            }));
+
+            if (!empty($searchColumns)) {
+                $itemsQuery->where(function ($query) use ($search, $searchColumns) {
+                    foreach ($searchColumns as $index => $column) {
+                        if ($index === 0) {
+                            $query->where($column, 'like', '%' . $search . '%');
+                        } else {
+                            $query->orWhere($column, 'like', '%' . $search . '%');
+                        }
+                    }
+                });
+            }
         }
 
         $total = $itemsQuery->count();
-        $items = $itemsQuery->limit($perPage)->get();
+        $items = $itemsQuery->get();
 
         $pendingRequests = auth()->user()->borrowRequests()->where('status', 'pending')->latest()->get();
         $approvedRequests = auth()->user()->borrowRequests()->where('status', 'accepted')->latest()->get();
@@ -330,11 +401,13 @@ class UserController extends Controller
         $venueFilter = $request->query('venue');
         $searchQuery = $request->query('search');
 
+        // Show all items from all categories
         $items = collect()
             ->merge(Item::orderBy('created_at', 'asc')->get())
             ->merge(EngineeringItem::orderBy('created_at', 'asc')->get())
             ->merge(MechanicalItem::orderBy('created_at', 'asc')->get())
-            ->merge(OperationItem::orderBy('created_at', 'asc')->get());
+            ->merge(OperationItem::orderBy('created_at', 'asc')->get())
+            ->merge(ElectricalItem::orderBy('created_at', 'asc')->get());
 
         $locations = $items->pluck('location')->filter()->unique()->sort()->values();
         $venues = $items->pluck('venue')->filter()->unique()->sort()->values();
@@ -351,7 +424,9 @@ class UserController extends Controller
                 return str_contains(strtolower($item->item_description ?? ''), $searchQuery)
                     || str_contains(strtolower($item->category_name ?? ''), $searchQuery)
                     || str_contains(strtolower($item->supplier ?? ''), $searchQuery)
-                    || str_contains(strtolower($item->remarks ?? ''), $searchQuery);
+                    || str_contains(strtolower($item->remarks ?? ''), $searchQuery)
+                    || str_contains(strtolower($item->sr_number ?? ''), $searchQuery)
+                    || str_contains(strtolower($item->sr_no ?? ''), $searchQuery);
             });
         }
 

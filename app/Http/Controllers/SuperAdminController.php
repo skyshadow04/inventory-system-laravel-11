@@ -13,6 +13,7 @@ class SuperAdminController extends Controller
     public function userManagement(Request $request)
     {
         $status = $request->query('status', 'all'); // all, verified, pending
+        $search = $request->query('search', '');
 
         $query = User::query();
 
@@ -22,9 +23,23 @@ class SuperAdminController extends Controller
             $query->where('is_verified', false);
         }
 
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('email', 'like', '%' . $search . '%')
+                  ->orWhere('user_group', 'like', '%' . $search . '%');
+            });
+        }
+
         $users = $query->orderBy('created_at', 'desc')->paginate(10);
 
-        return view('superadmin.userManagement', compact('users', 'status'));
+        // Get total statistics (not filtered by search)
+        $totalUsers = User::count();
+        $totalVerified = User::where('is_verified', true)->count();
+        $totalPending = User::where('is_verified', false)->count();
+        $totalSuperAdmins = User::where('is_superadmin', true)->count();
+
+        return view('superadmin.userManagement', compact('users', 'status', 'search', 'totalUsers', 'totalVerified', 'totalPending', 'totalSuperAdmins'));
     }
 
     /**
@@ -38,7 +53,7 @@ class SuperAdminController extends Controller
         }
 
         $data = $request->validate([
-            'role' => 'nullable|in:general,manager,resource_officer,superadmin',
+            'role' => 'nullable|in:general,manager,resource_officer,store_watcher,superadmin',
             'user_group' => 'nullable|string|max:255',
         ]);
 
@@ -48,8 +63,9 @@ class SuperAdminController extends Controller
             'is_verified' => true,
             'is_manager' => $role === 'manager',
             'is_resource_officer' => $role === 'resource_officer',
+            'is_store_watcher' => $role === 'store_watcher',
             'is_superadmin' => $role === 'superadmin',
-            'user_group' => $data['user_group'] ?? 'General',
+            'user_group' => $role === 'store_watcher' ? 'Store Watcher' : ($data['user_group'] ?? 'General'),
         ]);
 
         return redirect()->route('superadmin.user-management')->with('success', "User '{$user->name}' has been approved and can now login.");
@@ -97,20 +113,28 @@ class SuperAdminController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-            'role' => 'nullable|in:general,manager,resource_officer,superadmin',
+            'password' => 'nullable|string|min:8',
+            'role' => 'nullable|in:general,manager,resource_officer,store_watcher,superadmin',
             'user_group' => 'nullable|string|max:255',
         ]);
 
         $role = $data['role'] ?? 'general';
 
-        $user->update([
+        $updateData = [
             'name' => $data['name'],
             'email' => $data['email'],
             'is_manager' => $role === 'manager',
             'is_resource_officer' => $role === 'resource_officer',
+            'is_store_watcher' => $role === 'store_watcher',
             'is_superadmin' => $role === 'superadmin',
-            'user_group' => $data['user_group'] ?? 'General',
-        ]);
+            'user_group' => $role === 'store_watcher' ? 'Store Watcher' : ($data['user_group'] ?? 'General'),
+        ];
+
+        if (!empty($data['password'])) {
+            $updateData['password'] = $data['password'];
+        }
+
+        $user->update($updateData);
 
         return redirect()->route('superadmin.user-management')->with('success', "User '{$user->name}' has been updated successfully.");
     }

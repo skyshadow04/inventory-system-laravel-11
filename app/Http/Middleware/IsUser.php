@@ -15,13 +15,15 @@ class IsUser
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user() && ($request->user()->is_superadmin || $request->user()->is_manager || $request->user()->is_resource_officer)) {
+        if ($request->user() && ($request->user()->is_superadmin || $request->user()->is_manager || $request->user()->is_resource_officer || $request->user()->is_store_watcher)) {
             if ($request->user()->is_superadmin) {
                 return redirect('/superadmin');
             } elseif ($request->user()->is_manager) {
                 return redirect('/manager'); // Assuming there's a manager dashboard
-            } else {
+            } elseif ($request->user()->is_resource_officer) {
                 return redirect('/resource-officer');
+            } else {
+                return redirect('/store-watcher');
             }
         }
 

@@ -19,17 +19,35 @@
                 </div>
             @endif
 
+            <!-- Search Form -->
+            <div class="mb-6">
+                <form method="GET" action="{{ route('superadmin.user-management') }}" class="flex items-center gap-4">
+                    <input type="hidden" name="status" value="{{ $status }}" />
+                    <div class="flex-1 max-w-md">
+                        <input type="text" name="search" value="{{ $search ?? '' }}" placeholder="Search by name, email, or user group..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Search
+                    </button>
+                    @if($search)
+                        <a href="{{ route('superadmin.user-management', ['status' => $status]) }}" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
+                            Clear
+                        </a>
+                    @endif
+                </form>
+            </div>
+
             <!-- Filter Tabs -->
             <div class="mb-6 flex gap-4 border-b border-gray-200">
-                <a href="{{ route('superadmin.user-management', ['status' => 'all']) }}"
+                <a href="{{ route('superadmin.user-management', ['status' => 'all'] + ($search ? ['search' => $search] : [])) }}"
                    class="px-4 py-3 font-medium {{ $status === 'all' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
                     All Users
                 </a>
-                <a href="{{ route('superadmin.user-management', ['status' => 'pending']) }}"
+                <a href="{{ route('superadmin.user-management', ['status' => 'pending'] + ($search ? ['search' => $search] : [])) }}"
                    class="px-4 py-3 font-medium {{ $status === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
                     Pending Approval
                 </a>
-                <a href="{{ route('superadmin.user-management', ['status' => 'verified']) }}"
+                <a href="{{ route('superadmin.user-management', ['status' => 'verified'] + ($search ? ['search' => $search] : [])) }}"
                    class="px-4 py-3 font-medium {{ $status === 'verified' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
                     Verified
                 </a>
@@ -61,6 +79,8 @@
                                             <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Manager</span>
                                         @elseif ($user->is_resource_officer)
                                             <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">Resource Officer</span>
+                                        @elseif ($user->is_store_watcher)
+                                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Store Watcher</span>
                                         @else
                                             <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">User</span>
                                         @endif
@@ -85,7 +105,7 @@
                                                 data-user-email="{{ $user->email }}"
                                                 data-user-registered="{{ $user->created_at->format('M d, Y H:i') }}"
                                                 data-user-group="{{ $user->user_group ?? 'General' }}"
-                                                data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : 'general')) }}">
+                                                data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : ($user->is_store_watcher ? 'store_watcher' : 'general'))) }}">
                                                 Approve
                                             </button>
                                             <form method="POST" action="{{ route('superadmin.user.reject', $user) }}" class="inline-block">
@@ -102,7 +122,7 @@
                                                 data-user-name="{{ $user->name }}"
                                                 data-user-email="{{ $user->email }}"
                                                 data-user-group="{{ $user->user_group ?? 'General' }}"
-                                                data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : 'general')) }}">
+                                                data-user-role="{{ $user->is_superadmin ? 'superadmin' : ($user->is_manager ? 'manager' : ($user->is_resource_officer ? 'resource_officer' : ($user->is_store_watcher ? 'store_watcher' : 'general'))) }}">
                                                 Edit
                                             </button>
                                             <form method="POST" action="{{ route('superadmin.user.deactivate', $user) }}" class="inline-block">
@@ -169,7 +189,14 @@
                                     <option value="Mechanical">Mechanical</option>
                                     <option value="Electrical">Electrical</option>
                                     <option value="Operations">Operations</option>
+                                    <option value="Instrument">Instrument</option>
+                                    <option value="Store Watcher">Store Watcher</option>
                                 </select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="edit-user-password" class="block text-sm font-medium text-slate-700">Reset Password</label>
+                                <input type="password" id="edit-user-password" name="password" autocomplete="new-password" class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" placeholder="Enter a new password to reset">
+                                <p class="mt-2 text-xs text-slate-500">Leave blank to keep the current password.</p>
                             </div>
                         </div>
 
@@ -187,6 +214,10 @@
                                 <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                     <input type="radio" name="role" value="resource_officer" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
                                     <span>Resource Officer</span>
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="store_watcher" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                    <span>Store Watcher</span>
                                 </label>
                                 <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                     <input type="radio" name="role" value="superadmin" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
@@ -243,6 +274,8 @@
                                     <option value="Mechanical">Mechanical</option>
                                     <option value="Electrical">Electrical</option>
                                     <option value="Operations">Operations</option>
+                                    <option value="Instrument">Instrument</option>
+                                    <option value="Store Watcher">Store Watcher</option>
                                 </select>
                             </div>
                         </div>
@@ -261,6 +294,10 @@
                                 <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                     <input type="radio" name="role" value="resource_officer" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
                                     <span>Resource Officer</span>
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
+                                    <input type="radio" name="role" value="store_watcher" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
+                                    <span>Store Watcher</span>
                                 </label>
                                 <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm hover:border-slate-300">
                                     <input type="radio" name="role" value="superadmin" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500">
@@ -290,6 +327,18 @@
                     const editEmailField = document.getElementById('edit-user-email');
                     const editGroupSelect = document.getElementById('edit-user-group');
                     const editRoleRadios = Array.from(editForm.querySelectorAll('input[name="role"]'));
+                    function syncUserRoleWithGroup(groupSelect, roleRadios) {
+                        if (groupSelect.value === 'Store Watcher') {
+                            roleRadios.forEach(radio => {
+                                radio.checked = radio.value === 'store_watcher';
+                            });
+                        } else if (roleRadios.some(radio => radio.checked && radio.value === 'store_watcher')) {
+                            roleRadios.forEach(radio => {
+                                radio.checked = radio.value === 'general';
+                            });
+                        }
+                    }
+                    editGroupSelect.addEventListener('change', () => syncUserRoleWithGroup(editGroupSelect, editRoleRadios));
                     const editCloseButtons = [
                         document.getElementById('close-edit-modal'),
                         document.getElementById('cancel-edit-user'),
@@ -344,6 +393,18 @@
                     const registeredField = document.getElementById('approve-user-registered');
                     const groupSelect = document.getElementById('approve-user-group');
                     const roleRadios = Array.from(form.querySelectorAll('input[name="role"]'));
+                    function syncApproveRoleWithGroup(groupSelect, roleRadios) {
+                        if (groupSelect.value === 'Store Watcher') {
+                            roleRadios.forEach(radio => {
+                                radio.checked = radio.value === 'store_watcher';
+                            });
+                        } else if (roleRadios.some(radio => radio.checked && radio.value === 'store_watcher')) {
+                            roleRadios.forEach(radio => {
+                                radio.checked = radio.value === 'general';
+                            });
+                        }
+                    }
+                    groupSelect.addEventListener('change', () => syncApproveRoleWithGroup(groupSelect, roleRadios));
                     const approveActionRouteBase = '{{ url('superadmin/users') }}';
 
                     function openModal(user) {
@@ -396,19 +457,19 @@
             <div class="mt-10 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white rounded-lg shadow p-6">
                     <p class="text-gray-600 text-sm font-medium">Total Users</p>
-                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ count($users) > 0 ? 'See list' : '0' }}</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ $totalUsers }}</p>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <p class="text-gray-600 text-sm font-medium">Verified</p>
-                    <p class="text-3xl font-bold text-green-600 mt-2">{{ $users->where('is_verified', true)->count() }}</p>
+                    <p class="text-3xl font-bold text-green-600 mt-2">{{ $totalVerified }}</p>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <p class="text-gray-600 text-sm font-medium">Pending Approval</p>
-                    <p class="text-3xl font-bold text-yellow-600 mt-2">{{ $users->where('is_verified', false)->count() }}</p>
+                    <p class="text-3xl font-bold text-yellow-600 mt-2">{{ $totalPending }}</p>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <p class="text-gray-600 text-sm font-medium">Super Admins</p>
-                    <p class="text-3xl font-bold text-purple-600 mt-2">{{ $users->where('is_superadmin', true)->count() }}</p>
+                    <p class="text-3xl font-bold text-purple-600 mt-2">{{ $totalSuperAdmins }}</p>
                 </div>
             </div>
         </div>

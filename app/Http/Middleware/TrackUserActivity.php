@@ -34,7 +34,12 @@ class TrackUserActivity
                     Auth::logout();
                     $userSession->delete();
                     session()->invalidate();
-                    return redirect('/login')->with('message', 'Session expired. Please login again.');
+                    
+                    if ($request->ajax() || $request->expectsJson()) {
+                        return response()->json(['message' => 'Session expired. Please login again.'], 401);
+                    } else {
+                        return redirect('/login')->with('message', 'Session expired. Please login again.');
+                    }
                 }
 
                 // Update last activity

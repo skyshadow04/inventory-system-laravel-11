@@ -124,7 +124,7 @@
         </div>
 
         <div class="mt-6">
-            <a href="{{ auth()->user()->is_superadmin ? '/superadmin' : (auth()->user()->is_manager ? '/manager' : '/users') }}" class="inline-block px-4 py-2 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition font-medium">
+            <a href="{{ auth()->user()->is_superadmin ? '/superadmin' : (auth()->user()->is_manager ? '/manager' : (auth()->user()->is_store_watcher ? '/store-watcher' : '/users')) }}" class="inline-block px-4 py-2 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition font-medium">
                 ← Back
             </a>
         </div>

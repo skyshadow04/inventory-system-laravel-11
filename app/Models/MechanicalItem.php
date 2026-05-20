@@ -13,6 +13,14 @@ class MechanicalItem extends Model
     protected $primaryKey = 'id';
     public $incrementing = true;
 
+    protected $appends = [
+        'sr_number',
+        'item_description',
+        'physical_stock',
+        'supplier',
+        'venue',
+    ];
+
     protected $fillable = [
         'sr_no',
         'category_name',

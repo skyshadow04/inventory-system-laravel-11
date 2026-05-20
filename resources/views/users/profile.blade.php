@@ -88,6 +88,9 @@
                                         'Engineering' => 'Engineering (Engg/INS)',
                                         'Mechanical' => 'Mechanical (ENGG/MEC)',
                                         'Operations' => 'Operations (OPTNS)',
+                                        'Electrical' => 'Electrical',
+                                        'Instrument' => 'Instrument Group',
+                                        'Store Watcher' => 'Store Watcher',
                                     ];
                                     $displayName = $groupDisplayNames[$user->user_group] ?? ($user->user_group ?? 'Not assigned');
                                 @endphp
@@ -108,7 +111,10 @@
                                 @if ($user->is_resource_officer)
                                     <span class="inline-block px-4 py-2 text-sm font-semibold rounded-full bg-blue-400 text-white">Resource Officer</span>
                                 @endif
-                                @if (!$user->is_superadmin && !$user->is_manager && !$user->is_resource_officer)
+                                @if ($user->is_store_watcher)
+                                    <span class="inline-block px-4 py-2 text-sm font-semibold rounded-full bg-green-500 text-white">Store Watcher</span>
+                                @endif
+                                @if (!$user->is_superadmin && !$user->is_manager && !$user->is_resource_officer && !$user->is_store_watcher)
                                     <span class="inline-block px-4 py-2 text-sm font-semibold rounded-full bg-gray-300 text-gray-800">Regular User</span>
                                 @endif
                             </div>
